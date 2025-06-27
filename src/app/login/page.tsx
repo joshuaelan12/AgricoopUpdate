@@ -14,13 +14,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Leaf } from "lucide-react";
 import Link from "next/link";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import { 
   signInWithEmailAndPassword, 
   GoogleAuthProvider,
-  signInWithPopup
+  signInWithPopup,
+  signOut,
 } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
+import { doc, getDoc } from "firebase/firestore";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -45,8 +47,25 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
-      router.push("/");
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      // Check if user exists in our Firestore 'users' collection
+      const userDocRef = doc(db, "users", user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (userDocSnap.exists()) {
+        router.push("/");
+      } else {
+        // If user doesn't exist in our DB, they need to sign up first
+        // to be associated with a company.
+        await signOut(auth);
+        toast({
+          variant: "destructive",
+          title: "Login Failed",
+          description: "This Google account is not registered. Please sign up first.",
+        });
+      }
     } catch (error: any) {
       toast({
         variant: "destructive",

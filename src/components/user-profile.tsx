@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Settings, LogOut } from 'lucide-react';
+import { Settings, LogOut, Briefcase } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -61,7 +61,7 @@ export default function UserProfile() {
                     </Avatar>
                     <div className="flex flex-col items-start truncate">
                         <span className="font-medium truncate">{user.displayName || user.email?.split('@')[0]}</span>
-                        <span className="text-xs text-sidebar-foreground/70 truncate">{user.email}</span>
+                        <span className="text-xs text-sidebar-foreground/70 truncate">{user.role}</span>
                     </div>
                 </SidebarMenuButton>
             </DropdownMenuTrigger>
@@ -75,6 +75,10 @@ export default function UserProfile() {
                     </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                 <DropdownMenuItem disabled>
+                    <Briefcase className="mr-2 h-4 w-4" />
+                    <span>{user.role}</span>
+                </DropdownMenuItem>
                 <DropdownMenuItem>
                     <Settings className="mr-2 h-4 w-4" />
                     <span>Settings</span>
