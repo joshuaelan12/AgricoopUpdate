@@ -4,32 +4,17 @@ import {
   Bell,
   Home,
   Leaf,
-  LineChart,
   ListChecks,
-  LogOut,
-  Package,
-  Package2,
   PanelLeft,
   Search,
-  Settings,
-  User,
-  Users,
   Warehouse,
   FolderKanban,
 } from 'lucide-react';
-import { SidebarProvider, Sidebar, SidebarTrigger, SidebarInset, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from '@/components/ui/sidebar';
+import { SidebarProvider, Sidebar, SidebarTrigger, SidebarInset, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Toaster } from "@/components/ui/toaster"
+import UserProfile from '@/components/user-profile';
 
 import './globals.css';
 
@@ -91,39 +76,7 @@ export default function RootLayout({
                 <SidebarFooter>
                   <SidebarMenu>
                     <SidebarMenuItem>
-                       <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                             <SidebarMenuButton tooltip="User Profile" className="justify-start w-full">
-                                <User />
-                                <div className="flex flex-col items-start">
-                                  <span>Admin User</span>
-                                  <span className="text-xs text-sidebar-foreground/70">admin@agricoop.com</span>
-                                </div>
-                            </SidebarMenuButton>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent className="w-56" align="end" forceMount>
-                            <DropdownMenuLabel className="font-normal">
-                              <div className="flex flex-col space-y-1">
-                                <p className="text-sm font-medium leading-none">Admin User</p>
-                                <p className="text-xs leading-none text-muted-foreground">
-                                  admin@agricoop.com
-                                </p>
-                              </div>
-                            </DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem>
-                              <Settings className="mr-2 h-4 w-4" />
-                              <span>Settings</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <Link href="/login">
-                              <DropdownMenuItem>
-                                <LogOut className="mr-2 h-4 w-4" />
-                                <span>Log out</span>
-                              </DropdownMenuItem>
-                            </Link>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                       <UserProfile />
                     </SidebarMenuItem>
                   </SidebarMenu>
                 </SidebarFooter>
