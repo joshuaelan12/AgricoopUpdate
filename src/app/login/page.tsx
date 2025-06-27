@@ -51,9 +51,9 @@ export default function LoginPage() {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // 2. Query for the company by name
+      // 2. Query for the company by name, trimming whitespace.
       const companiesRef = collection(db, "companies");
-      const q = query(companiesRef, where("name", "==", companyName));
+      const q = query(companiesRef, where("name", "==", companyName.trim()));
       const companySnapshot = await getDocs(q);
 
       if (companySnapshot.empty) {
@@ -101,6 +101,10 @@ export default function LoginPage() {
         });
       }
     } catch (error: any) {
+      // On any failure, ensure the user is signed out before showing an error.
+      if (auth.currentUser) {
+        await signOut(auth);
+      }
       toast({
         variant: "destructive",
         title: "Login Failed",
