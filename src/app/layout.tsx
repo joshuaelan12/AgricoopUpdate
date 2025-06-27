@@ -32,17 +32,18 @@ export default function RootLayout({
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !user && pathname !== '/login') {
+    const isAuthPage = pathname === '/login' || pathname === '/signup';
+    if (!loading && !user && !isAuthPage) {
       router.push('/login');
     }
-    if (!loading && user && pathname === '/login') {
+    if (!loading && user && isAuthPage) {
         router.push('/');
     }
   }, [user, loading, pathname, router]);
 
-  const isLoginPage = pathname === '/login';
+  const isAuthPage = pathname === '/login' || pathname === '/signup';
 
-  const showLoadingScreen = loading || (!user && !isLoginPage) || (user && isLoginPage);
+  const showLoadingScreen = loading || (!user && !isAuthPage) || (user && isAuthPage);
 
   if (showLoadingScreen) {
     return (
@@ -73,7 +74,7 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased">
         <SidebarProvider>
-            {isLoginPage ? (
+            {isAuthPage ? (
                  <main className="flex-1">{children}</main>
             ) : (
                 <div className="flex min-h-screen w-full flex-col bg-muted/40">
