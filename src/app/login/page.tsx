@@ -15,63 +15,95 @@ import { Label } from "@/components/ui/label";
 import { Leaf } from "lucide-react";
 import Link from "next/link";
 import { auth, db } from "@/lib/firebase";
-import { 
-  signInWithEmailAndPassword, 
-  GoogleAuthProvider,
-  signInWithPopup,
-  signOut,
-} from "firebase/auth";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
-import { doc, getDoc } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { AuthUser } from "@/hooks/use-auth";
+
+const roles: AuthUser['role'][] = ['Admin', 'Project Manager', 'Member', 'Accountant'];
 
 export default function LoginPage() {
+  const [companyName, setCompanyName] = useState("");
+  const [role, setRole] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-      router.push("/");
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Login Failed",
-        description: error.message,
-      });
+    setIsLoading(true);
+
+    if (!companyName || !role || !email || !password) {
+        toast({
+            variant: "destructive",
+            title: "Login Failed",
+            description: "Please fill in all fields.",
+        });
+        setIsLoading(false);
+        return;
     }
-  };
 
-  const handleGoogleLogin = async () => {
-    const provider = new GoogleAuthProvider();
     try {
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
+      // 1. Authenticate with email/password
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
 
-      // Check if user exists in our Firestore 'users' collection
-      const userDocRef = doc(db, "users", user.uid);
-      const userDocSnap = await getDoc(userDocRef);
+      // 2. Query for the company by name
+      const companiesRef = collection(db, "companies");
+      const q = query(companiesRef, where("name", "==", companyName));
+      const companySnapshot = await getDocs(q);
 
-      if (userDocSnap.exists()) {
-        router.push("/");
-      } else {
-        // If user doesn't exist in our DB, they need to sign up first
-        // to be associated with a company.
+      if (companySnapshot.empty) {
         await signOut(auth);
         toast({
           variant: "destructive",
           title: "Login Failed",
-          description: "This Google account is not registered. Please sign up first.",
+          description: "Company not found.",
+        });
+        setIsLoading(false);
+        return;
+      }
+      const companyId = companySnapshot.docs[0].id;
+
+      // 3. Get user document
+      const userDocRef = doc(db, "users", user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (userDocSnap.exists()) {
+        const userData = userDocSnap.data();
+        // 4. Verify company and role
+        if (userData.companyId === companyId && userData.role === role) {
+          // Success!
+          router.push("/");
+        } else {
+          // Mismatch
+          await signOut(auth);
+          toast({
+            variant: "destructive",
+            title: "Login Failed",
+            description: "Invalid role for this company or user.",
+          });
+        }
+      } else {
+        // User doc doesn't exist (should not happen if they signed up correctly)
+        await signOut(auth);
+        toast({
+          variant: "destructive",
+          title: "Login Failed",
+          description: "User profile not found. Please sign up.",
         });
       }
     } catch (error: any) {
       toast({
         variant: "destructive",
-        title: "Google Login Failed",
-        description: error.message,
+        title: "Login Failed",
+        description: error.code === 'auth/invalid-credential' ? 'Invalid email or password.' : error.message,
       });
+    } finally {
+        setIsLoading(false);
     }
   };
 
@@ -89,6 +121,30 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="company-name">Company Name</Label>
+              <Input
+                id="company-name"
+                type="text"
+                placeholder="Your Company Inc."
+                required
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+              />
+            </div>
+             <div className="grid gap-2">
+                <Label htmlFor="role">Role</Label>
+                <Select onValueChange={setRole} value={role}>
+                    <SelectTrigger id="role">
+                        <SelectValue placeholder="Select your role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {roles.map(r => (
+                            <SelectItem key={r} value={r}>{r}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -112,23 +168,10 @@ export default function LoginPage() {
               </div>
               <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
-            <Button type="submit" className="w-full">
-              Login
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? 'Logging in...' : 'Login'}
             </Button>
           </form>
-          <div className="relative my-4">
-            <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">
-                Or continue with
-                </span>
-            </div>
-           </div>
-          <Button variant="outline" className="w-full" onClick={handleGoogleLogin}>
-            Login with Google
-          </Button>
           <div className="mt-4 text-center text-sm">
             Don&apos;t have an account?{" "}
             <Link href="/signup" className="underline">
