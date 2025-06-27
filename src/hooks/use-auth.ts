@@ -8,6 +8,7 @@ import { auth, db } from '@/lib/firebase';
 
 export interface AuthUser extends User {
     companyId: string;
+    companyName: string;
     role: 'Admin' | 'Project Manager' | 'Member' | 'Accountant';
 }
 
@@ -23,9 +24,15 @@ export function useAuth() {
 
                 if (userDocSnap.exists()) {
                     const userData = userDocSnap.data();
+                    
+                    const companyDocRef = doc(db, "companies", userData.companyId);
+                    const companyDocSnap = await getDoc(companyDocRef);
+                    const companyName = companyDocSnap.exists() ? companyDocSnap.data().name : "Unknown Company";
+
                     setUser({
                         ...authUser,
                         companyId: userData.companyId,
+                        companyName: companyName,
                         role: userData.role,
                     });
                 } else {

@@ -57,11 +57,11 @@ export default function UserProfile() {
                 <SidebarMenuButton tooltip="User Profile" className="justify-start w-full">
                     <Avatar className="h-8 w-8">
                         {user.photoURL && <AvatarImage src={user.photoURL} alt={user.displayName || 'User'} />}
-                        <AvatarFallback>{user.email?.charAt(0).toUpperCase()}</AvatarFallback>
+                        <AvatarFallback>{user.displayName?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase()}</AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col items-start truncate">
                         <span className="font-medium truncate">{user.displayName || user.email?.split('@')[0]}</span>
-                        <span className="text-xs text-sidebar-foreground/70 truncate">{user.role}</span>
+                        <span className="text-xs text-sidebar-foreground/70 truncate">{user.companyName}</span>
                     </div>
                 </SidebarMenuButton>
             </DropdownMenuTrigger>
@@ -77,7 +77,7 @@ export default function UserProfile() {
                 <DropdownMenuSeparator />
                  <DropdownMenuItem disabled>
                     <Briefcase className="mr-2 h-4 w-4" />
-                    <span>{user.role}</span>
+                    <span>{user.role} at {user.companyName}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem>
                     <Settings className="mr-2 h-4 w-4" />

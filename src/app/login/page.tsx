@@ -77,14 +77,18 @@ export default function LoginPage() {
         // 4. Verify company and role
         if (userData.companyId === companyId && userData.role === role) {
           // Success!
-          router.push("/");
+          if (role === 'Admin') {
+            router.push("/admin-dashboard");
+          } else {
+            router.push("/");
+          }
         } else {
           // Mismatch
           await signOut(auth);
           toast({
             variant: "destructive",
             title: "Login Failed",
-            description: "Invalid role for this company or user.",
+            description: "Invalid role or company for this user.",
           });
         }
       } else {
@@ -93,7 +97,7 @@ export default function LoginPage() {
         toast({
           variant: "destructive",
           title: "Login Failed",
-          description: "User profile not found. Please sign up.",
+          description: "User profile not found. Please contact your admin.",
         });
       }
     } catch (error: any) {
@@ -108,7 +112,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center p-4">
+    <div className="flex min-h-screen items-center justify-center p-4">
       <Card className="mx-auto max-w-sm w-full">
         <CardHeader>
           <div className="flex justify-center mb-4">
@@ -172,11 +176,8 @@ export default function LoginPage() {
               {isLoading ? 'Logging in...' : 'Login'}
             </Button>
           </form>
-          <div className="mt-4 text-center text-sm">
-            Don&apos;t have an account?{" "}
-            <Link href="/signup" className="underline">
-              Sign up
-            </Link>
+          <div className="mt-4 text-center text-sm text-muted-foreground">
+            Need an account? Contact your company&apos;s administrator.
           </div>
         </CardContent>
       </Card>
