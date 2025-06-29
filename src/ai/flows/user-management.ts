@@ -9,7 +9,7 @@ import { z } from 'zod';
 import * as admin from 'firebase-admin';
 import { getApps, initializeApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
 
 // Initialize Firebase Admin SDK if not already initialized
@@ -78,7 +78,7 @@ const createUserFlow = ai.defineFlow(
         email: input.email,
         companyId: input.companyId,
         role: input.role,
-        createdAt: new Date(),
+        createdAt: FieldValue.serverTimestamp(),
       });
 
       return {
