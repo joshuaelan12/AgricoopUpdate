@@ -50,6 +50,21 @@ export default function SignUpPage() {
 
     setIsLoading(true);
     try {
+      // Check if company already exists
+      const companiesRef = collection(db, "companies");
+      const q = query(companiesRef, where("name", "==", companyName.trim()));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        toast({
+          variant: "destructive",
+          title: "Sign Up Failed",
+          description: "A company with this name already exists. Please choose a different name or log in.",
+        });
+        setIsLoading(false);
+        return;
+      }
+
       // 1. Create user in Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
@@ -57,26 +72,13 @@ export default function SignUpPage() {
       // 2. Update Firebase Auth profile
       await updateProfile(user, { displayName: fullName });
 
-      // 3. Handle Company and User Role in Firestore
-      const companiesRef = collection(db, "companies");
-      const q = query(companiesRef, where("name", "==", companyName));
-      const querySnapshot = await getDocs(q);
-
-      let companyId: string;
-      let userRole: string = 'Member';
-
-      if (querySnapshot.empty) {
-        // Company doesn't exist, create it and set user as Admin
-        const newCompanyRef = await addDoc(companiesRef, {
-          name: companyName,
-          createdAt: serverTimestamp(),
-        });
-        companyId = newCompanyRef.id;
-        userRole = 'Admin';
-      } else {
-        // Company exists, assign user to it
-        companyId = querySnapshot.docs[0].id;
-      }
+      // 3. Create the new company and set user as Admin
+      const newCompanyRef = await addDoc(companiesRef, {
+        name: companyName.trim(),
+        createdAt: serverTimestamp(),
+      });
+      const companyId = newCompanyRef.id;
+      const userRole = 'Admin';
 
       // 4. Create user document in 'users' collection
       await setDoc(doc(db, "users", user.uid), {
@@ -88,13 +90,18 @@ export default function SignUpPage() {
         createdAt: serverTimestamp(),
       });
 
-      router.push("/");
+      // Redirect to admin dashboard on successful signup
+      router.push("/admin-dashboard");
 
     } catch (error: any) {
+       let errorMessage = error.message;
+        if (error.code === 'auth/email-already-exists') {
+           errorMessage = 'This email address is already in use by another account.';
+        }
       toast({
         variant: "destructive",
         title: "Sign Up Failed",
-        description: error.message,
+        description: errorMessage,
       });
     } finally {
       setIsLoading(false);
@@ -102,21 +109,21 @@ export default function SignUpPage() {
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center p-4">
+    <div className="flex min-h-screen items-center justify-center p-4 bg-background">
       <Card className="mx-auto max-w-sm w-full">
         <CardHeader>
           <div className="flex justify-center mb-4">
             <Leaf className="h-12 w-12 text-primary" />
           </div>
-          <CardTitle className="text-3xl text-center font-headline">Create an Account</CardTitle>
+          <CardTitle className="text-3xl text-center font-headline">Create Company Account</CardTitle>
           <CardDescription className="text-center">
-            Enter your details to sign up for AgriCoop
+            Sign up to create your company and admin account.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSignUp} className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="full-name">Full Name</Label>
+              <Label htmlFor="full-name">Your Full Name</Label>
               <Input
                 id="full-name"
                 type="text"
@@ -131,18 +138,18 @@ export default function SignUpPage() {
               <Input
                 id="company-name"
                 type="text"
-                placeholder="AgriCorp Inc."
+                placeholder="Your Company Inc."
                 required
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">Admin Email</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="m@example.com"
+                placeholder="admin@yourcompany.com"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -157,7 +164,7 @@ export default function SignUpPage() {
               <Input id="confirm-password" type="password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
             </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Signing Up...' : 'Sign Up'}
+              {isLoading ? 'Creating Account...' : 'Sign Up'}
             </Button>
           </form>
           <div className="mt-4 text-center text-sm">
@@ -169,5 +176,5 @@ export default function SignUpPage() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

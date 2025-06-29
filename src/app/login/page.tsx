@@ -128,7 +128,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
+    <div className="flex min-h-screen items-center justify-center p-4 bg-background">
       <Card className="mx-auto max-w-sm w-full">
         <CardHeader>
           <div className="flex justify-center mb-4">
@@ -193,7 +193,10 @@ export default function LoginPage() {
             </Button>
           </form>
           <div className="mt-4 text-center text-sm text-muted-foreground">
-            Need an account? Contact your company&apos;s administrator.
+            Don't have an account?{" "}
+            <Link href="/signup" className="underline">
+              Create a company account
+            </Link>
           </div>
         </CardContent>
       </Card>
