@@ -12,18 +12,8 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
 const initializeFirebaseAdmin = () => {
-    // Initialize Firebase Admin SDK if not already initialized.
-    if (!getApps().length) {
-        try {
-            // When running on App Hosting, the SDK is automatically initialized via Application Default Credentials.
-            // For local development, you must set the GOOGLE_APPLICATION_CREDENTIALS
-            // environment variable to point to your service account key file.
-            // See: https://firebase.google.com/docs/admin/setup#initialize-sdk
-            initializeApp();
-        } catch (error: any) {
-            console.error('Firebase Admin SDK initialization error:', error.stack);
-            throw new Error(`Failed to initialize Firebase Admin SDK. Please ensure your environment is configured correctly. Original error: ${error.message}`);
-        }
+    if (getApps().length === 0) {
+        initializeApp();
     }
 };
 
@@ -92,6 +82,8 @@ const createUserFlow = ai.defineFlow(
        let errorMessage = 'An unknown error occurred.';
        if (error.code === 'auth/email-already-exists') {
            errorMessage = 'This email address is already in use by another account.';
+       } else if (error.message && error.message.includes('Google OAuth2 access token')) {
+           errorMessage = 'Firebase Admin authentication failed. This is an environment configuration issue. Please ensure the GOOGLE_APPLICATION_CREDENTIALS environment variable in your .env file is set correctly to point to your Firebase service account key file. You can create and download this key from your Firebase project settings under "Service accounts".';
        } else if (error.message) {
            errorMessage = error.message;
        }
