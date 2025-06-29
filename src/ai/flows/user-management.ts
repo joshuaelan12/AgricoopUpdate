@@ -12,21 +12,13 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
 
-// Initialize Firebase Admin SDK if not already initialized
+// Initialize Firebase Admin SDK if not already initialized.
 if (!getApps().length) {
-  try {
-    // Attempt to initialize with application default credentials
-    initializeApp();
-  } catch (e) {
-    console.error('Firebase admin initialization error: make sure you have GOOGLE_APPLICATION_CREDENTIALS set.', e);
-    // As a fallback for local dev, you might use a service account key
-    // but DO NOT commit the key to your repository.
-    // if (process.env.SERVICE_ACCOUNT_KEY) {
-    //   initializeApp({
-    //     credential: cert(JSON.parse(process.env.SERVICE_ACCOUNT_KEY)),
-    //   });
-    // }
-  }
+  // When running on App Hosting, the SDK is automatically initialized.
+  // For local development, you must set the GOOGLE_APPLICATION_CREDENTIALS
+  // environment variable to point to your service account key file.
+  // See: https://firebase.google.com/docs/admin/setup#initialize-sdk
+  initializeApp();
 }
 
 const CreateUserInputSchema = z.object({
