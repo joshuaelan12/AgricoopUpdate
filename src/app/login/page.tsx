@@ -17,7 +17,7 @@ import Link from "next/link";
 import { auth, db } from "@/lib/firebase";
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
-import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { collection, doc, getDoc } from "firebase/firestore";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { AuthUser } from "@/hooks/use-auth";
 
@@ -25,7 +25,7 @@ const roles: AuthUser['role'][] = ['Admin', 'Project Manager', 'Member', 'Accoun
 
 export default function LoginPage() {
   const [companyName, setCompanyName] = useState("");
-  const [role, setRole] = useState("");
+  const [role, setRole] = useState<AuthUser['role'] | "">("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -51,55 +51,67 @@ export default function LoginPage() {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // 2. Query for the company by name, trimming whitespace.
-      const companiesRef = collection(db, "companies");
-      const q = query(companiesRef, where("name", "==", companyName.trim()));
-      const companySnapshot = await getDocs(q);
-
-      if (companySnapshot.empty) {
-        await signOut(auth);
-        toast({
-          variant: "destructive",
-          title: "Login Failed",
-          description: "Company not found.",
-        });
-        setIsLoading(false);
-        return;
-      }
-      const companyId = companySnapshot.docs[0].id;
-
-      // 3. Get user document
+      // 2. Get user document from Firestore
       const userDocRef = doc(db, "users", user.uid);
       const userDocSnap = await getDoc(userDocRef);
 
-      if (userDocSnap.exists()) {
-        const userData = userDocSnap.data();
-        // 4. Verify company and role
-        if (userData.companyId === companyId && userData.role === role) {
-          // Success!
+      if (!userDocSnap.exists()) {
+          await signOut(auth);
+          toast({
+              variant: "destructive",
+              title: "Login Failed",
+              description: "User profile not found. Please contact your admin.",
+          });
+          setIsLoading(false);
+          return;
+      }
+      
+      const userData = userDocSnap.data();
+
+      // 3. Get company document from Firestore
+      const companyDocRef = doc(db, "companies", userData.companyId);
+      const companyDocSnap = await getDoc(companyDocRef);
+
+      if (!companyDocSnap.exists()) {
+          await signOut(auth);
+          toast({
+              variant: "destructive",
+              title: "Login Failed",
+              description: "Company data associated with this user could not be found.",
+          });
+          setIsLoading(false);
+          return;
+      }
+
+      const companyData = companyDocSnap.data();
+
+      // 4. Verify company name (case-insensitive) and role
+      const isCompanyMatch = companyData.name.trim().toLowerCase() === companyName.trim().toLowerCase();
+      const isRoleMatch = userData.role === role;
+
+      if (isCompanyMatch && isRoleMatch) {
+          // Success! Redirect based on role.
           if (role === 'Admin') {
             router.push("/admin-dashboard");
           } else {
             router.push("/");
           }
-        } else {
+      } else {
           // Mismatch
           await signOut(auth);
+           let description = "Invalid company or role for this account.";
+           if (!isCompanyMatch) {
+               description = "The company name entered does not match the one on record for this user. Please check for typos and try again."
+           } else if (!isRoleMatch) {
+               description = `The role selected is incorrect. Your account has a different role assigned.`
+           }
           toast({
-            variant: "destructive",
-            title: "Login Failed",
-            description: "Invalid role or company for this user.",
+              variant: "destructive",
+              title: "Login Failed",
+              description: description,
           });
-        }
-      } else {
-        // User doc doesn't exist (should not happen if they signed up correctly)
-        await signOut(auth);
-        toast({
-          variant: "destructive",
-          title: "Login Failed",
-          description: "User profile not found. Please contact your admin.",
-        });
       }
+
     } catch (error: any) {
       // On any failure, ensure the user is signed out before showing an error.
       if (auth.currentUser) {
@@ -108,7 +120,7 @@ export default function LoginPage() {
       toast({
         variant: "destructive",
         title: "Login Failed",
-        description: error.code === 'auth/invalid-credential' ? 'Invalid email or password.' : error.message,
+        description: error.code === 'auth/invalid-credential' ? 'Invalid email or password.' : 'An unexpected error occurred. Please try again.',
       });
     } finally {
         setIsLoading(false);
@@ -142,7 +154,7 @@ export default function LoginPage() {
             </div>
              <div className="grid gap-2">
                 <Label htmlFor="role">Role</Label>
-                <Select onValueChange={setRole} value={role}>
+                <Select onValueChange={(value) => setRole(value as AuthUser['role'])} value={role}>
                     <SelectTrigger id="role">
                         <SelectValue placeholder="Select your role" />
                     </SelectTrigger>
