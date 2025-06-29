@@ -7,19 +7,25 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 import * as admin from 'firebase-admin';
-import { getApps, initializeApp, cert } from 'firebase-admin/app';
+import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
-
-// Initialize Firebase Admin SDK if not already initialized.
-if (!getApps().length) {
-  // When running on App Hosting, the SDK is automatically initialized.
-  // For local development, you must set the GOOGLE_APPLICATION_CREDENTIALS
-  // environment variable to point to your service account key file.
-  // See: https://firebase.google.com/docs/admin/setup#initialize-sdk
-  initializeApp();
-}
+const initializeFirebaseAdmin = () => {
+    // Initialize Firebase Admin SDK if not already initialized.
+    if (!getApps().length) {
+        try {
+            // When running on App Hosting, the SDK is automatically initialized via Application Default Credentials.
+            // For local development, you must set the GOOGLE_APPLICATION_CREDENTIALS
+            // environment variable to point to your service account key file.
+            // See: https://firebase.google.com/docs/admin/setup#initialize-sdk
+            initializeApp();
+        } catch (error: any) {
+            console.error('Firebase Admin SDK initialization error:', error.stack);
+            throw new Error(`Failed to initialize Firebase Admin SDK. Please ensure your environment is configured correctly. Original error: ${error.message}`);
+        }
+    }
+};
 
 const CreateUserInputSchema = z.object({
   email: z.string().email(),
@@ -53,6 +59,7 @@ const createUserFlow = ai.defineFlow(
   },
   async (input) => {
     try {
+      initializeFirebaseAdmin();
       const auth = getAuth();
       const firestore = getFirestore();
 
