@@ -2,26 +2,7 @@
 
 import { z } from 'zod';
 import { adminAuth, adminDb, FieldValue } from '@/lib/firebase-admin';
-
-const CreateUserInputSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
-  displayName: z.string(),
-  companyId: z.string(),
-  role: z.enum(['Project Manager', 'Member', 'Accountant']),
-});
-export type CreateUserInput = z.infer<typeof CreateUserInputSchema>;
-
-const CreateUserOutputSchema = z.object({
-  success: z.boolean(),
-  error: z.string().optional(),
-  user: z.object({
-      uid: z.string(),
-      email: z.string(),
-      displayName: z.string()
-  }).optional(),
-});
-export type CreateUserOutput = z.infer<typeof CreateUserOutputSchema>;
+import type { CreateUserInput, CreateUserOutput } from '@/lib/schemas';
 
 
 export async function createUser(input: CreateUserInput): Promise<CreateUserOutput> {

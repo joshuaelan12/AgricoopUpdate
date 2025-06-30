@@ -11,7 +11,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
-import { createProject, CreateProjectInputSchema } from "@/lib/actions/project.actions";
+import { createProject } from "@/lib/actions/project.actions";
+import { CreateProjectInputSchema } from "@/lib/schemas";
 import { useToast } from "@/hooks/use-toast";
 
 import {

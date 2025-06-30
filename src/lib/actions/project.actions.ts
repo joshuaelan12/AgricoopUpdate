@@ -3,17 +3,7 @@
 import { z } from 'zod';
 import { adminDb, FieldValue } from '@/lib/firebase-admin';
 import { revalidatePath } from 'next/cache';
-
-// --- ZOD SCHEMAS ---
-export const CreateProjectInputSchema = z.object({
-  title: z.string().min(1, "Title is required."),
-  description: z.string().min(1, "Description is required."),
-  status: z.enum(["Planning", "In Progress", "On Hold", "Completed", "Delayed"]),
-  team: z.array(z.string()).min(1, "At least one team member is required."),
-  companyId: z.string(),
-});
-
-export type CreateProjectInput = z.infer<typeof CreateProjectInputSchema>;
+import { CreateProjectInputSchema, type CreateProjectInput } from '@/lib/schemas';
 
 // --- SERVER ACTION ---
 export async function createProject(input: CreateProjectInput) {

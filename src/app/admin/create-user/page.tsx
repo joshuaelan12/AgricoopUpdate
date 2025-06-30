@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { createUser, CreateUserInput } from '@/lib/actions/user.actions';
+import { createUser } from '@/lib/actions/user.actions';
+import type { CreateUserInput } from '@/lib/schemas';
 import { Loader2, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
