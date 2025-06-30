@@ -48,8 +48,18 @@ export type CreateUserOutput = z.infer<typeof CreateUserOutputSchema>;
 
 
 export async function createUser(input: CreateUserInput): Promise<CreateUserOutput> {
+    let app: App;
     try {
-      const app = initializeFirebaseAdmin();
+        app = initializeFirebaseAdmin();
+    } catch (error: any) {
+        console.error("Firebase Admin SDK Initialization Error:", error.message);
+        return {
+            success: false,
+            error: `Failed to initialize Firebase Admin SDK. This is a server configuration issue. Details: ${error.message}`
+        }
+    }
+    
+    try {
       const auth = getAuth(app);
       const firestore = getFirestore(app);
 
@@ -79,6 +89,7 @@ export async function createUser(input: CreateUserInput): Promise<CreateUserOutp
         }
       };
     } catch (error: any) {
+       console.error("Error in createUser server action:", error);
        let errorMessage = 'An unknown error occurred.';
        if (error.code === 'auth/email-already-exists') {
            errorMessage = 'This email address is already in use by another account.';
