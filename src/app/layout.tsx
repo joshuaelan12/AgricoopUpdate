@@ -11,6 +11,7 @@ import {
   Search,
   Warehouse,
   FolderKanban,
+  Users,
 } from 'lucide-react';
 import { SidebarProvider, Sidebar, SidebarTrigger, SidebarInset, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
@@ -146,6 +147,12 @@ export default function RootLayout({
                           <SidebarMenuButton href="/projects" tooltip="Projects">
                             <FolderKanban />
                             <span>Projects</span>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                          <SidebarMenuButton href="/members" tooltip="Members">
+                            <Users />
+                            <span>Members</span>
                           </SidebarMenuButton>
                         </SidebarMenuItem>
                         <SidebarMenuItem>

@@ -137,7 +137,7 @@ export default function Dashboard() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge className="bg-green-600 text-white">Completed</Badge>
+                    <Badge>Completed</Badge>
                   </TableCell>
                   <TableCell>Project Bravo</TableCell>
                   <TableCell className="text-right">1 day ago</TableCell>
