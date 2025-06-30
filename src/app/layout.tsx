@@ -24,6 +24,96 @@ import { useToast } from "@/hooks/use-toast";
 
 import './globals.css';
 
+function AppLayout({ children }: { children: React.ReactNode }) {
+    const pathname = usePathname();
+    const isActive = (path: string) => pathname === path;
+
+    return (
+        <SidebarProvider>
+            <div className="flex min-h-screen w-full flex-row bg-muted/40">
+                <Sidebar>
+                    <SidebarHeader>
+                      <Link href="/" className="flex items-center gap-2 font-semibold">
+                        <Leaf className="h-6 w-6 text-primary" />
+                        <span className="font-headline text-2xl text-sidebar-foreground">AgriCoop</span>
+                      </Link>
+                    </SidebarHeader>
+                    <SidebarContent>
+                      <SidebarMenu>
+                        <SidebarMenuItem>
+                            <SidebarMenuButton asChild tooltip="Dashboard" isActive={isActive('/')}>
+                                <Link href="/">
+                                    <Home />
+                                    <span>Dashboard</span>
+                                </Link>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                            <SidebarMenuButton asChild tooltip="Projects" isActive={isActive('/projects')}>
+                                <Link href="/projects">
+                                    <FolderKanban />
+                                    <span>Projects</span>
+                                </Link>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                           <SidebarMenuButton asChild tooltip="Members" isActive={isActive('/members')}>
+                                <Link href="/members">
+                                    <Users />
+                                    <span>Members</span>
+                                </Link>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                           <SidebarMenuButton asChild tooltip="Resources" isActive={isActive('/resources')}>
+                                <Link href="/resources">
+                                    <Warehouse />
+                                    <span>Resources</span>
+                                </Link>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                           <SidebarMenuButton asChild tooltip="Checklist Builder" isActive={isActive('/checklist-builder')}>
+                                <Link href="/checklist-builder">
+                                    <ListChecks />
+                                    <span>Checklist Builder</span>
+                                </Link>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      </SidebarMenu>
+                    </SidebarContent>
+                    <SidebarFooter>
+                      <SidebarMenu>
+                        <SidebarMenuItem>
+                           <UserProfile />
+                        </SidebarMenuItem>
+                      </SidebarMenu>
+                    </SidebarFooter>
+                </Sidebar>
+
+                <SidebarInset>
+                  <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
+                    <SidebarTrigger variant="outline" />
+                    <div className="relative ml-auto flex-1 md:grow-0">
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="search"
+                        placeholder="Search..."
+                        className="w-full rounded-lg bg-background pl-8 md:w-[200px] lg:w-[320px]"
+                      />
+                    </div>
+                    <Button variant="outline" size="icon" className="ml-auto sm:ml-0 h-10 w-10">
+                      <Bell className="h-5 w-5" />
+                      <span className="sr-only">Toggle notifications</span>
+                    </Button>
+                  </header>
+                  <main className="flex-1 p-6">{children}</main>
+                </SidebarInset>
+            </div>
+        </SidebarProvider>
+    )
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -78,44 +168,6 @@ export default function RootLayout({
                             (user && isAuthPage) || 
                             (user && isAdminPage && user.role !== 'Admin');
 
-  if (showLoadingScreen) {
-    return (
-        <html lang="en">
-            <head>
-                <title>AgriCoop</title>
-                <link rel="preconnect" href="https://fonts.googleapis.com" />
-                <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-                <link href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..900;1,400..900&family=Belleza&display=swap" rel="stylesheet" />
-            </head>
-            <body className="font-body antialiased">
-                <div className="flex min-h-screen w-full items-center justify-center bg-background">
-                    <Leaf className="h-16 w-16 animate-spin text-primary" />
-                </div>
-            </body>
-        </html>
-    )
-  }
-  
-  const isSpecialLayoutPage = isAuthPage || isAdminPage;
-
-  if (isSpecialLayoutPage) {
-    return (
-         <html lang="en">
-            <head>
-                <title>AgriCoop</title>
-                <meta name="description" content="Collaborative platform for agricultural cooperatives." />
-                <link rel="preconnect" href="https://fonts.googleapis.com" />
-                <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-                <link href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..900;1,400..900&family=Belleza&display=swap" rel="stylesheet" />
-            </head>
-            <body className="font-body antialiased">
-                {children}
-                <Toaster />
-            </body>
-        </html>
-    )
-  }
-  
   return (
     <html lang="en">
       <head>
@@ -126,78 +178,17 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..900;1,400..900&family=Belleza&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased">
-        <SidebarProvider>
-            <div className="flex min-h-screen w-full flex-row bg-muted/40">
-                <Sidebar>
-                    <SidebarHeader>
-                      <Link href="/" className="flex items-center gap-2 font-semibold">
-                        <Leaf className="h-6 w-6 text-primary" />
-                        <span className="font-headline text-2xl text-sidebar-foreground">AgriCoop</span>
-                      </Link>
-                    </SidebarHeader>
-                    <SidebarContent>
-                      <SidebarMenu>
-                        <SidebarMenuItem>
-                          <SidebarMenuButton href="/" tooltip="Dashboard">
-                            <Home />
-                            <span>Dashboard</span>
-                          </SidebarMenuButton>
-                        </SidebarMenuItem>
-                        <SidebarMenuItem>
-                          <SidebarMenuButton href="/projects" tooltip="Projects">
-                            <FolderKanban />
-                            <span>Projects</span>
-                          </SidebarMenuButton>
-                        </SidebarMenuItem>
-                        <SidebarMenuItem>
-                          <SidebarMenuButton href="/members" tooltip="Members">
-                            <Users />
-                            <span>Members</span>
-                          </SidebarMenuButton>
-                        </SidebarMenuItem>
-                        <SidebarMenuItem>
-                          <SidebarMenuButton href="/resources" tooltip="Resources">
-                            <Warehouse />
-                            <span>Resources</span>
-                          </SidebarMenuButton>
-                        </SidebarMenuItem>
-                        <SidebarMenuItem>
-                          <SidebarMenuButton href="/checklist-builder" tooltip="Checklist Builder">
-                            <ListChecks />
-                            <span>Checklist Builder</span>
-                          </SidebarMenuButton>
-                        </SidebarMenuItem>
-                      </SidebarMenu>
-                    </SidebarContent>
-                    <SidebarFooter>
-                      <SidebarMenu>
-                        <SidebarMenuItem>
-                           <UserProfile />
-                        </SidebarMenuItem>
-                      </SidebarMenu>
-                    </SidebarFooter>
-                </Sidebar>
-
-                <SidebarInset>
-                  <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
-                    <SidebarTrigger variant="outline" />
-                    <div className="relative ml-auto flex-1 md:grow-0">
-                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        type="search"
-                        placeholder="Search..."
-                        className="w-full rounded-lg bg-background pl-8 md:w-[200px] lg:w-[320px]"
-                      />
-                    </div>
-                    <Button variant="outline" size="icon" className="ml-auto sm:ml-0 h-10 w-10">
-                      <Bell className="h-5 w-5" />
-                      <span className="sr-only">Toggle notifications</span>
-                    </Button>
-                  </header>
-                  <main className="flex-1 p-6">{children}</main>
-                </SidebarInset>
+        {showLoadingScreen ? (
+            <div className="flex min-h-screen w-full items-center justify-center bg-background">
+                <Leaf className="h-16 w-16 animate-spin text-primary" />
             </div>
-        </SidebarProvider>
+        ) : (isAuthPage || isAdminPage) ? (
+            <>
+                {children}
+            </>
+        ) : (
+            <AppLayout>{children}</AppLayout>
+        )}
         <Toaster />
       </body>
     </html>
