@@ -13,7 +13,7 @@ import {
   FolderKanban,
   Users,
 } from 'lucide-react';
-import { SidebarProvider, Sidebar, SidebarTrigger, SidebarInset, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter } from '@/components/ui/sidebar';
+import { SidebarProvider, Sidebar, SidebarTrigger, SidebarInset, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter, SidebarRail } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Toaster } from "@/components/ui/toaster"
@@ -129,6 +129,7 @@ export default function RootLayout({
         <SidebarProvider>
             <div className="flex min-h-screen w-full flex-col bg-muted/40">
                 <Sidebar>
+                    <SidebarRail />
                     <SidebarHeader>
                       <Link href="/" className="flex items-center gap-2 font-semibold">
                         <Leaf className="h-6 w-6 text-primary" />
@@ -178,7 +179,7 @@ export default function RootLayout({
                     </SidebarFooter>
                 </Sidebar>
 
-                <SidebarInset className="flex flex-col sm:gap-4 sm:py-4 sm:pl-14">
+                <SidebarInset className="flex flex-col sm:gap-4 sm:pl-14">
                   <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
                     <SidebarTrigger variant="outline" className="sm:hidden" />
                     <div className="relative ml-auto flex-1 md:grow-0">
@@ -194,7 +195,7 @@ export default function RootLayout({
                       <span className="sr-only">Toggle notifications</span>
                     </Button>
                   </header>
-                  <main className="flex-1 p-4 sm:px-6 sm:py-0">{children}</main>
+                  <main className="flex-1 p-4 sm:p-6">{children}</main>
                 </SidebarInset>
             </div>
         </SidebarProvider>
