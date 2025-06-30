@@ -64,15 +64,6 @@ interface ResourceAllocation {
     fertilizer: number;
 }
 
-const staticResourceAllocationData = [
-  { month: 'Jan', seeds: 400, fertilizer: 240 },
-  { month: 'Feb', seeds: 300, fertilizer: 139 },
-  { month: 'Mar', seeds: 200, fertilizer: 980 },
-  { month: 'Apr', seeds: 278, fertilizer: 390 },
-  { month: 'May', seeds: 189, fertilizer: 480 },
-  { month: 'Jun', seeds: 239, fertilizer: 380 },
-];
-
 const statusVariant: { [key: string]: "default" | "secondary" | "destructive" | "outline" } = {
   "Completed": "default",
   "In Progress": "outline",
@@ -86,7 +77,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentTasks, setRecentTasks] = useState<RecentTask[]>([]);
   const [projectProgress, setProjectProgress] = useState<ProjectProgress[]>([]);
-  const [resourceAllocation, setResourceAllocation] = useState<ResourceAllocation[]>(staticResourceAllocationData);
+  const [resourceAllocation, setResourceAllocation] = useState<ResourceAllocation[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -142,9 +133,7 @@ export default function Dashboard() {
           setProjectProgress(projectProgressSnap.docs.map(doc => ({ name: doc.data().title, progress: doc.data().progress })));
 
           const allocationData = resourceAllocationSnap.docs.map(doc => doc.data() as ResourceAllocation);
-          if (allocationData.length > 0) {
-            setResourceAllocation(allocationData);
-          }
+          setResourceAllocation(allocationData);
 
         } catch (error) {
           console.error("Error fetching dashboard data:", error);
@@ -289,24 +278,30 @@ export default function Dashboard() {
       </div>
        <Card>
           <CardHeader>
-            <CardTitle className="font-headline">Resource Allocation (Sample)</CardTitle>
+            <CardTitle className="font-headline">Resource Allocation</CardTitle>
             <CardDescription>Monthly usage of key resources.</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={resourceAllocation} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false}/>
-                <Tooltip 
-                  contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))" }}
-                  labelStyle={{ color: "hsl(var(--foreground))" }}
-                />
-                <Legend wrapperStyle={{fontSize: "14px"}}/>
-                <Line type="monotone" dataKey="seeds" stroke="hsl(var(--primary))" strokeWidth={2} name="Seeds (kg)" />
-                <Line type="monotone" dataKey="fertilizer" stroke="hsl(var(--accent))" strokeWidth={2} name="Fertilizer (kg)" />
-              </LineChart>
-            </ResponsiveContainer>
+            {resourceAllocation.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={resourceAllocation} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false}/>
+                    <Tooltip 
+                    contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))" }}
+                    labelStyle={{ color: "hsl(var(--foreground))" }}
+                    />
+                    <Legend wrapperStyle={{fontSize: "14px"}}/>
+                    <Line type="monotone" dataKey="seeds" stroke="hsl(var(--primary))" strokeWidth={2} name="Seeds (kg)" />
+                    <Line type="monotone" dataKey="fertilizer" stroke="hsl(var(--accent))" strokeWidth={2} name="Fertilizer (kg)" />
+                </LineChart>
+                </ResponsiveContainer>
+            ) : (
+                <div className="flex justify-center items-center h-[300px] text-muted-foreground">
+                    No resource usage data available to display chart.
+                </div>
+            )}
           </CardContent>
         </Card>
     </div>
