@@ -4,14 +4,12 @@
  * - createUser - Creates a new user in Firebase Auth and Firestore.
  */
 
-import { genkit } from 'genkit';
-import { z } from 'zod';
+import { ai } from '@/ai/genkit';
+import { z } from 'genkit';
 import * as admin from 'firebase-admin';
 import { getApps, initializeApp, App } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-
-const ai = genkit();
 
 const initializeFirebaseAdmin = (): App => {
     if (getApps().length > 0) {
