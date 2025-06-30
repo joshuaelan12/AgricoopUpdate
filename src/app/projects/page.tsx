@@ -2,10 +2,17 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import Image from "next/image"
+import Image from "next/image";
 import { useAuth } from "@/hooks/use-auth";
 import { db } from "@/lib/firebase";
 import { collection, query, where, getDocs } from 'firebase/firestore';
+import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+
+import { createProject, CreateProjectInputSchema } from "@/lib/actions/project.actions";
+import { useToast } from "@/hooks/use-toast";
 
 import {
   Card,
@@ -19,7 +26,32 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton";
-import { FolderKanban } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogClose
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+
+import { FolderKanban, PlusCircle, Users as UsersIcon, ChevronDown, Loader2 } from "lucide-react";
+
 
 // --- DATA INTERFACES ---
 interface Project {
@@ -35,6 +67,7 @@ interface Project {
 }
 
 interface UserData {
+  uid: string;
   displayName: string;
 }
 
@@ -55,7 +88,6 @@ const statusColors: { [key: string]: string } = {
   "Planning": "bg-gray-500",
   "Delayed": "bg-red-500",
 };
-
 
 // --- SKELETON COMPONENT ---
 const ProjectCardSkeleton = () => (
@@ -90,6 +122,140 @@ const ProjectCardSkeleton = () => (
   </Card>
 );
 
+// --- CREATE PROJECT DIALOG COMPONENT ---
+type CreateProjectDialogProps = {
+  users: UserData[];
+  companyId: string;
+};
+
+function CreateProjectDialog({ users, companyId }: CreateProjectDialogProps) {
+  const [open, setOpen] = useState(false);
+  const router = useRouter();
+  const { toast } = useToast();
+
+  const form = useForm<z.infer<typeof CreateProjectInputSchema>>({
+    resolver: zodResolver(CreateProjectInputSchema),
+    defaultValues: {
+      title: "",
+      description: "",
+      status: "Planning",
+      team: [],
+      companyId: companyId,
+    },
+  });
+
+  const onSubmit = async (values: z.infer<typeof CreateProjectInputSchema>) => {
+    const result = await createProject(values);
+    if (result.success) {
+      toast({
+        title: "Project Created",
+        description: `"${values.title}" has been successfully created.`,
+      });
+      form.reset();
+      setOpen(false);
+      router.refresh();
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Creation Failed",
+        description: result.error || "An unexpected error occurred.",
+      });
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button>
+          <PlusCircle className="mr-2 h-4 w-4" />
+          Create Project
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[500px]">
+        <DialogHeader>
+          <DialogTitle className="font-headline text-2xl">Create a New Project</DialogTitle>
+          <DialogDescription>
+            Fill in the details below to add a new project for your company.
+          </DialogDescription>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField control={form.control} name="title" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Project Title</FormLabel>
+                <FormControl><Input placeholder="e.g., Spring Planting Initiative" {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )}/>
+            <FormField control={form.control} name="description" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Description</FormLabel>
+                <FormControl><Textarea placeholder="Describe the project's goals and scope." {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )}/>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField control={form.control} name="status" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Status</FormLabel>
+                   <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select a status" /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      {["Planning", "In Progress", "On Hold", "Delayed", "Completed"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}/>
+              <FormField control={form.control} name="team" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Assign Team</FormLabel>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <FormControl>
+                        <Button variant="outline" className="w-full justify-between">
+                         {field.value?.length > 0 ? `${field.value.length} selected` : "Select team members"}
+                         <ChevronDown className="h-4 w-4 opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="w-56">
+                      <DropdownMenuLabel>Available Members</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {users.map(user => (
+                         <DropdownMenuCheckboxItem
+                          key={user.uid}
+                          checked={field.value?.includes(user.uid)}
+                          onCheckedChange={(checked) => {
+                            return checked
+                              ? field.onChange([...field.value, user.uid])
+                              : field.onChange(field.value?.filter(id => id !== user.uid))
+                          }}
+                        >
+                          {user.displayName}
+                        </DropdownMenuCheckboxItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <FormMessage />
+                </FormItem>
+              )}/>
+            </div>
+            <DialogFooter>
+               <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
+              <Button type="submit" disabled={form.formState.isSubmitting}>
+                 {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Create Project
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+
 // --- MAIN COMPONENT ---
 export default function ProjectsPage() {
   const { user } = useAuth();
@@ -120,7 +286,7 @@ export default function ProjectsPage() {
         const projectsData = projectsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Project[];
         
         const usersData = usersSnap.docs.reduce((acc, doc) => {
-          acc[doc.id] = doc.data() as UserData;
+          acc[doc.id] = { uid: doc.id, ...(doc.data() as Omit<UserData, 'uid'>) };
           return acc;
         }, {} as { [uid: string]: UserData });
 
@@ -139,11 +305,19 @@ export default function ProjectsPage() {
   
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-4xl font-headline text-foreground">Projects</h1>
-        <p className="text-muted-foreground">
-          Browse and manage all projects within your cooperative.
-        </p>
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-4xl font-headline text-foreground">Projects</h1>
+          <p className="text-muted-foreground">
+            Browse and manage all projects within your cooperative.
+          </p>
+        </div>
+         {user && (user.role === 'Admin' || user.role === 'Project Manager') && !loading && (
+          <CreateProjectDialog 
+            users={Object.values(users)} 
+            companyId={user.companyId} 
+          />
+        )}
       </div>
 
       {loading && (
