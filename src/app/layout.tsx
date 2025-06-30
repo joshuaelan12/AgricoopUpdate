@@ -127,7 +127,7 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased">
         <SidebarProvider>
-            <div className="flex min-h-screen w-full flex-col bg-muted/40">
+            <div className="flex min-h-screen w-full flex-row bg-muted/40">
                 <Sidebar>
                     <SidebarHeader>
                       <Link href="/" className="flex items-center gap-2 font-semibold">
@@ -178,7 +178,7 @@ export default function RootLayout({
                     </SidebarFooter>
                 </Sidebar>
 
-                <SidebarInset className="flex flex-col">
+                <SidebarInset>
                   <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
                     <SidebarTrigger variant="outline" />
                     <div className="relative ml-auto flex-1 md:grow-0">
