@@ -1,31 +1,9 @@
 'use server';
 
 import { z } from 'zod';
-import * as admin from 'firebase-admin';
-import { getApps, initializeApp, App } from 'firebase-admin/app';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { adminDb } from '@/lib/firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { revalidatePath } from 'next/cache';
-
-// --- INITIALIZE FIREBASE ADMIN ---
-const initializeFirebaseAdmin = (): App => {
-    if (getApps().length > 0) {
-        return getApps()[0];
-    }
-
-    if (process.env.FIREBASE_ADMIN_SDK_CONFIG) {
-        try {
-            const serviceAccount = JSON.parse(process.env.FIREBASE_ADMIN_SDK_CONFIG);
-            return initializeApp({
-                credential: admin.credential.cert(serviceAccount)
-            });
-        } catch (e: any) {
-            console.error("Failed to parse FIREBASE_ADMIN_SDK_CONFIG:", e.message);
-            throw new Error("The FIREBASE_ADMIN_SDK_CONFIG environment variable is not a valid JSON object.");
-        }
-    } else {
-       throw new Error('Firebase Admin authentication failed. The FIREBASE_ADMIN_SDK_CONFIG environment variable is not set. Please set it as a JSON string in your .env file. You can get these credentials from your Firebase project settings under "Service accounts".');
-    }
-};
 
 // --- ZOD SCHEMAS ---
 export const CreateProjectInputSchema = z.object({
@@ -40,19 +18,10 @@ export type CreateProjectInput = z.infer<typeof CreateProjectInputSchema>;
 
 // --- SERVER ACTION ---
 export async function createProject(input: CreateProjectInput) {
-    let app: App;
-    try {
-        app = initializeFirebaseAdmin();
-    } catch (error: any) {
-        return { success: false, error: error.message };
-    }
-
-    const firestore = getFirestore(app);
-
     try {
         const validatedInput = CreateProjectInputSchema.parse(input);
 
-        const newProjectRef = firestore.collection('projects').doc();
+        const newProjectRef = adminDb.collection('projects').doc();
         
         await newProjectRef.set({
             ...validatedInput,
