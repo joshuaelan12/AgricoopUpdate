@@ -4,12 +4,14 @@
  * - createUser - Creates a new user in Firebase Auth and Firestore.
  */
 
-import { ai } from '@/ai/genkit';
+import { genkit } from 'genkit';
 import { z } from 'zod';
 import * as admin from 'firebase-admin';
 import { getApps, initializeApp, App } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+
+const ai = genkit();
 
 const initializeFirebaseAdmin = (): App => {
     if (getApps().length > 0) {
@@ -27,8 +29,7 @@ const initializeFirebaseAdmin = (): App => {
             throw new Error("The FIREBASE_ADMIN_SDK_CONFIG environment variable is not a valid JSON object.");
         }
     } else {
-        // Fallback for GOOGLE_APPLICATION_CREDENTIALS file path
-        return initializeApp();
+       throw new Error('Firebase Admin authentication failed. This is an environment configuration issue. Please ensure the FIREBASE_ADMIN_SDK_CONFIG (as a JSON string in your .env file) or the GOOGLE_APPLICATION_CREDENTIALS (as a file path) environment variable is set up correctly. You can get these credentials from your Firebase project settings under "Service accounts".');
     }
 };
 
