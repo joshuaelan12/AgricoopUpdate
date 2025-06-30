@@ -1,8 +1,7 @@
 'use server';
 
 import { z } from 'zod';
-import { adminAuth, adminDb } from '@/lib/firebase-admin';
-import { FieldValue } from 'firebase-admin/firestore';
+import { adminAuth, adminDb, FieldValue } from '@/lib/firebase-admin';
 
 const CreateUserInputSchema = z.object({
   email: z.string().email(),

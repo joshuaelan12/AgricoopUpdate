@@ -1,8 +1,7 @@
 'use server';
 
 import { z } from 'zod';
-import { adminDb } from '@/lib/firebase-admin';
-import { FieldValue } from 'firebase-admin/firestore';
+import { adminDb, FieldValue } from '@/lib/firebase-admin';
 import { revalidatePath } from 'next/cache';
 
 // --- ZOD SCHEMAS ---
