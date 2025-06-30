@@ -7,13 +7,28 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 import * as admin from 'firebase-admin';
-import { getApps, initializeApp } from 'firebase-admin/app';
+import { getApps, initializeApp, App } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
-const initializeFirebaseAdmin = () => {
-    if (getApps().length === 0) {
-        initializeApp();
+const initializeFirebaseAdmin = (): App => {
+    if (getApps().length > 0) {
+        return getApps()[0];
+    }
+
+    if (process.env.FIREBASE_ADMIN_SDK_CONFIG) {
+        try {
+            const serviceAccount = JSON.parse(process.env.FIREBASE_ADMIN_SDK_CONFIG);
+            return initializeApp({
+                credential: admin.credential.cert(serviceAccount)
+            });
+        } catch (e: any) {
+            console.error("Failed to parse FIREBASE_ADMIN_SDK_CONFIG:", e.message);
+            throw new Error("The FIREBASE_ADMIN_SDK_CONFIG environment variable is not a valid JSON object.");
+        }
+    } else {
+        // Fallback for GOOGLE_APPLICATION_CREDENTIALS file path
+        return initializeApp();
     }
 };
 
@@ -49,9 +64,9 @@ const createUserFlow = ai.defineFlow(
   },
   async (input) => {
     try {
-      initializeFirebaseAdmin();
-      const auth = getAuth();
-      const firestore = getFirestore();
+      const app = initializeFirebaseAdmin();
+      const auth = getAuth(app);
+      const firestore = getFirestore(app);
 
       // Create user in Firebase Auth
       const userRecord = await auth.createUser({
@@ -82,8 +97,8 @@ const createUserFlow = ai.defineFlow(
        let errorMessage = 'An unknown error occurred.';
        if (error.code === 'auth/email-already-exists') {
            errorMessage = 'This email address is already in use by another account.';
-       } else if (error.message && error.message.includes('Google OAuth2 access token')) {
-           errorMessage = 'Firebase Admin authentication failed. This is an environment configuration issue. Please ensure the GOOGLE_APPLICATION_CREDENTIALS environment variable in your .env file is set correctly to point to your Firebase service account key file. You can create and download this key from your Firebase project settings under "Service accounts".';
+       } else if (error.message && (error.message.includes('Google OAuth2 access token') || error.message.includes('credential'))) {
+           errorMessage = 'Firebase Admin authentication failed. This is an environment configuration issue. Please ensure the FIREBASE_ADMIN_SDK_CONFIG (as a JSON string in your .env file) or the GOOGLE_APPLICATION_CREDENTIALS (as a file path) environment variable is set up correctly. You can get these credentials from your Firebase project settings under "Service accounts".';
        } else if (error.message) {
            errorMessage = error.message;
        }
