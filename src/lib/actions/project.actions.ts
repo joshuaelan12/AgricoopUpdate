@@ -24,7 +24,11 @@ import {
     AllocateResourceInputSchema,
     DeallocateResourceInputSchema,
     type AllocateResourceInput,
-    type DeallocateResourceInput
+    type DeallocateResourceInput,
+    AddProjectOutputInputSchema,
+    DeleteProjectOutputInputSchema,
+    type AddProjectOutputInput,
+    type DeleteProjectOutputInput,
 } from '@/lib/schemas';
 import { logActivity } from './activity.actions';
 
@@ -39,6 +43,7 @@ export async function createProject(input: CreateProjectInput, actorName: string
             ...validatedInput,
             progress: 0,
             comments: [],
+            outputs: [],
             objectives: '',
             expectedOutcomes: '',
             priority: 'Medium',
@@ -178,7 +183,7 @@ export async function deleteProjectComment(input: DeleteProjectCommentInput) {
 export async function updateProject(input: UpdateProjectInput, actorName: string) {
     try {
         const validatedInput = UpdateProjectInputSchema.parse(input);
-        const { projectId, ...updateData } = validatedInput;
+        const { id: projectId, ...updateData } = validatedInput;
 
         const projectRef = adminDb.collection('projects').doc(projectId);
         const projectDoc = await projectRef.get();
@@ -335,6 +340,81 @@ export async function updateProjectPlanning(input: UpdateProjectPlanningInput, a
     }
 }
 
+export async function addProjectOutput(input: AddProjectOutputInput, actorName: string) {
+    try {
+        const validatedInput = AddProjectOutputInputSchema.parse(input);
+        const { projectId, description, quantity, unit } = validatedInput;
+
+        const projectRef = adminDb.collection('projects').doc(projectId);
+        const projectDoc = await projectRef.get();
+        if (!projectDoc.exists) throw new Error("Project not found.");
+        const projectData = projectDoc.data()!;
+
+        const newOutput = {
+            id: adminDb.collection('projects').doc().id,
+            description,
+            quantity,
+            unit,
+            date: new Date(),
+        };
+
+        await projectRef.update({
+            outputs: FieldValue.arrayUnion(newOutput)
+        });
+
+        await logActivity(projectData.companyId, `${actorName} logged a new output for project "${projectData.title}": ${quantity} ${unit} of ${description}.`);
+        revalidatePath('/outputs');
+
+        return { success: true };
+        
+    } catch (error: any) {
+        console.error("Error adding project output:", error);
+        if (error instanceof z.ZodError) {
+            return { success: false, error: "Validation failed.", issues: error.flatten() };
+        }
+        return { success: false, error: error.message || "An unknown error occurred." };
+    }
+}
+
+export async function deleteProjectOutput(input: DeleteProjectOutputInput, actorName: string) {
+    try {
+        const { projectId, outputId } = DeleteProjectOutputInputSchema.parse(input);
+
+        const projectRef = adminDb.collection('projects').doc(projectId);
+        const projectSnap = await projectRef.get();
+
+        if (!projectSnap.exists) {
+            return { success: false, error: "Project not found." };
+        }
+
+        const projectData = projectSnap.data()!;
+        if (!projectData || !Array.isArray(projectData.outputs)) {
+            return { success: false, error: "No outputs found on this project." };
+        }
+        
+        const outputToDelete = projectData.outputs.find((o: any) => o.id === outputId);
+
+        if (!outputToDelete) {
+            return { success: false, error: "Output record not found." };
+        }
+
+        await projectRef.update({
+            outputs: FieldValue.arrayRemove(outputToDelete),
+        });
+
+        await logActivity(projectData.companyId, `${actorName} removed an output log from project "${projectData.title}": ${outputToDelete.quantity} ${outputToDelete.unit} of ${outputToDelete.description}.`);
+        revalidatePath('/outputs');
+
+        return { success: true };
+
+    } catch (error: any) {
+        console.error("Error deleting project output:", error);
+        if (error instanceof z.ZodError) {
+            return { success: false, error: "Validation failed.", issues: error.flatten() };
+        }
+        return { success: false, error: error.message || "An unknown error occurred." };
+    }
+}
 
 export async function allocateResourceToProject(input: AllocateResourceInput, actorName: string) {
     try {

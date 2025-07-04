@@ -14,6 +14,7 @@ import {
   Users,
   GanttChartSquare,
   History,
+  ClipboardList,
 } from 'lucide-react';
 import { SidebarProvider, Sidebar, SidebarTrigger, SidebarInset, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
@@ -82,6 +83,14 @@ function AppLayout({ children }: { children: React.ReactNode }) {
                                 <Link href="/planning">
                                     <GanttChartSquare />
                                     <span>Planning</span>
+                                </Link>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                           <SidebarMenuButton asChild tooltip="Outputs" isActive={isActive('/outputs')}>
+                                <Link href="/outputs">
+                                    <ClipboardList />
+                                    <span>Outputs</span>
                                 </Link>
                             </SidebarMenuButton>
                         </SidebarMenuItem>
@@ -174,6 +183,17 @@ function AuthAndRoutingController({ children }: { children: React.ReactNode }) {
       router.push('/');
       return;
     }
+
+    // Allow all authenticated users to see Planning page
+    // if (pathname === '/planning' && user.role !== 'Admin' && user.role !== 'Project Manager') {
+    //   toast({
+    //     variant: "destructive",
+    //     title: "Access Denied",
+    //     description: "You do not have permission to view this page.",
+    //   });
+    //   router.push('/');
+    //   return;
+    // }
 
   }, [user, loading, pathname, router, toast]);
 

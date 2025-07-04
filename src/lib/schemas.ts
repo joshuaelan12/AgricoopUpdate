@@ -57,7 +57,7 @@ export const DeleteProjectCommentInputSchema = z.object({
 export type DeleteProjectCommentInput = z.infer<typeof DeleteProjectCommentInputSchema>;
 
 export const UpdateProjectInputSchema = z.object({
-  projectId: z.string(),
+  id: z.string(),
   title: z.string().min(1, "Title is required."),
   description: z.string().min(1, "Description is required."),
 });
@@ -83,6 +83,30 @@ export const UpdateProjectPlanningInputSchema = z.object({
   estimatedBudget: z.coerce.number().min(0, "Budget must be a positive number.").optional(),
 });
 export type UpdateProjectPlanningInput = z.infer<typeof UpdateProjectPlanningInputSchema>;
+
+// --- Project Output Schemas ---
+export const ProjectOutputSchema = z.object({
+  id: z.string(),
+  description: z.string().min(1, "Description is required."),
+  quantity: z.coerce.number().positive("Quantity must be a positive number."),
+  unit: z.string().min(1, "Unit is required."),
+  date: z.date(),
+});
+export type ProjectOutput = z.infer<typeof ProjectOutputSchema>;
+
+export const AddProjectOutputInputSchema = z.object({
+  projectId: z.string(),
+  description: z.string().min(1, "Description is required."),
+  quantity: z.coerce.number().positive("Quantity must be a positive number."),
+  unit: z.string().min(1, "Unit is required."),
+});
+export type AddProjectOutputInput = z.infer<typeof AddProjectOutputInputSchema>;
+
+export const DeleteProjectOutputInputSchema = z.object({
+    projectId: z.string(),
+    outputId: z.string(),
+});
+export type DeleteProjectOutputInput = z.infer<typeof DeleteProjectOutputInputSchema>;
 
 
 // --- Resource Schemas ---
