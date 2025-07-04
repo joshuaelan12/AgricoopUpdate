@@ -31,17 +31,18 @@ interface ActivityLog {
 }
 
 export default function ActivityLogPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) {
-      // Waiting for auth state to resolve
+    if (authLoading) {
+      // Still waiting for auth state to be determined.
       return;
     }
 
-    if (!user.companyId) {
+    if (!user || !user.companyId) {
+      // User is not logged in, or doesn't have a company.
       setLoading(false);
       setLogs([]);
       return;
@@ -55,15 +56,17 @@ export default function ActivityLogPage() {
     const unsubscribe = onSnapshot(logsQuery, (snap) => {
         const logsData = snap.docs.map(doc => {
             const data = doc.data();
+            // Handle pending server timestamps by providing a fallback client-side date.
+            // This ensures new activities appear instantly.
             return {
                 id: doc.id,
                 message: data.message,
-                timestamp: data.timestamp?.toDate(),
+                timestamp: data.timestamp?.toDate() || new Date(),
                 companyId: data.companyId,
             };
-        }).filter((l): l is ActivityLog => l.timestamp instanceof Date);
+        });
         
-        setLogs(logsData);
+        setLogs(logsData as ActivityLog[]);
         setLoading(false);
     }, (error) => {
         console.error("Error fetching activity logs:", error);
@@ -71,9 +74,9 @@ export default function ActivityLogPage() {
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, authLoading]);
 
-  if (loading) {
+  if (loading || authLoading) {
     return <ActivityLogSkeleton />;
   }
 
