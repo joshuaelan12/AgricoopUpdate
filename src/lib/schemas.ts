@@ -5,7 +5,7 @@ import { z } from 'zod';
 export const CreateUserInputSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
-  displayName: z.string(),
+  displayName: z.string().min(1, "Display name is required."),
   companyId: z.string(),
   role: z.enum(['Project Manager', 'Member', 'Accountant']),
 });
