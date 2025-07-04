@@ -3,20 +3,14 @@
 import { useState } from "react"
 import { useForm, SubmitHandler } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
-import { suggestChecklist, SuggestChecklistInput, SuggestChecklistOutput } from "@/ai/flows/checklist-suggestions"
+import { suggestChecklist } from "@/ai/flows/checklist-suggestions"
+import { SuggestChecklistInputSchema, type SuggestChecklistInput, type SuggestChecklistOutput } from "@/lib/schemas"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, Wand2, CheckSquare } from "lucide-react"
-
-const formSchema = z.object({
-  issueType: z.string({
-    required_error: "Please select an issue type.",
-  }),
-})
 
 const issueTypes = [
   { value: "pest infestation", label: "Pest Infestation" },
@@ -31,8 +25,8 @@ export default function ChecklistBuilderClient() {
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
 
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+  const form = useForm<SuggestChecklistInput>({
+    resolver: zodResolver(SuggestChecklistInputSchema),
   })
 
   const onSubmit: SubmitHandler<SuggestChecklistInput> = async (data) => {

@@ -63,3 +63,19 @@ export const SignUpUserOutputSchema = z.object({
     error: z.string().optional(),
 });
 export type SignUpUserOutput = z.infer<typeof SignUpUserOutputSchema>;
+
+
+// --- AI Checklist Schemas ---
+export const SuggestChecklistInputSchema = z.object({
+  issueType: z.string({
+    required_error: "Please select an issue type.",
+  }).describe('The type of issue reported (e.g., pest infestation, equipment malfunction).'),
+});
+export type SuggestChecklistInput = z.infer<typeof SuggestChecklistInputSchema>;
+
+export const SuggestChecklistOutputSchema = z.object({
+  actionItems: z
+    .array(z.string())
+    .describe('A list of suggested action items for the checklist.'),
+});
+export type SuggestChecklistOutput = z.infer<typeof SuggestChecklistOutputSchema>;

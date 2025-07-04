@@ -4,26 +4,11 @@
  * @fileOverview A checklist suggestion AI agent based on issue type.
  *
  * - suggestChecklist - A function that suggests checklist items based on the issue type.
- * - SuggestChecklistInput - The input type for the suggestChecklist function.
- * - SuggestChecklistOutput - The return type for the suggestChecklist function.
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-
-const SuggestChecklistInputSchema = z.object({
-  issueType: z
-    .string()
-    .describe('The type of issue reported (e.g., pest infestation, equipment malfunction).'),
-});
-export type SuggestChecklistInput = z.infer<typeof SuggestChecklistInputSchema>;
-
-const SuggestChecklistOutputSchema = z.object({
-  actionItems: z
-    .array(z.string())
-    .describe('A list of suggested action items for the checklist.'),
-});
-export type SuggestChecklistOutput = z.infer<typeof SuggestChecklistOutputSchema>;
+import { SuggestChecklistInputSchema, SuggestChecklistOutputSchema, type SuggestChecklistInput, type SuggestChecklistOutput } from '@/lib/schemas';
 
 export async function suggestChecklist(input: SuggestChecklistInput): Promise<SuggestChecklistOutput> {
   return suggestChecklistFlow(input);
@@ -106,4 +91,3 @@ const suggestChecklistFlow = ai.defineFlow(
     return output!;
   }
 );
-
