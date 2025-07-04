@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Package, Tractor, Droplets, DollarSign, Warehouse, PlusCircle, Loader2 } from "lucide-react";
+import { Package, Tractor, Droplets, DollarSign, Warehouse, PlusCircle, Loader2, Pencil } from "lucide-react";
 import { useAuth } from '@/hooks/use-auth';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -50,8 +50,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { createResource } from '@/lib/actions/resource.actions';
-import { CreateResourceInputSchema } from '@/lib/schemas';
+import { createResource, updateResource } from '@/lib/actions/resource.actions';
+import { CreateResourceInputSchema, UpdateResourceInputSchema } from '@/lib/schemas';
+import type { UpdateResourceInput } from '@/lib/schemas';
 
 
 // --- DATA INTERFACE ---
@@ -191,6 +192,111 @@ function AddResourceDialog({ companyId, onResourceAdded }: { companyId: string, 
   );
 }
 
+// --- EDIT RESOURCE DIALOG ---
+function EditResourceDialog({ resource, onResourceUpdated }: { resource: Resource, onResourceUpdated: () => void }) {
+  const [open, setOpen] = useState(false);
+  const { toast } = useToast();
+
+  const form = useForm<UpdateResourceInput>({
+    resolver: zodResolver(UpdateResourceInputSchema),
+    defaultValues: {
+      id: resource.id,
+      name: resource.name,
+      category: resource.category,
+      quantity: resource.quantity,
+      status: resource.status,
+    },
+  });
+
+  const onSubmit = async (values: UpdateResourceInput) => {
+    const result = await updateResource(values);
+    if (result.success) {
+      toast({
+        title: "Resource Updated",
+        description: `"${values.name}" has been successfully updated.`,
+      });
+      setOpen(false);
+      onResourceUpdated();
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Update Failed",
+        description: result.error || "An unexpected error occurred.",
+      });
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon">
+          <Pencil className="h-4 w-4" />
+          <span className="sr-only">Edit Resource</span>
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle className="font-headline text-2xl">Edit Resource</DialogTitle>
+          <DialogDescription>
+            Update the details for "{resource.name}".
+          </DialogDescription>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField control={form.control} name="name" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Resource Name</FormLabel>
+                <FormControl><Input placeholder="e.g., Organic Fertilizer" {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )}/>
+            <FormField control={form.control} name="quantity" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Quantity / Value</FormLabel>
+                <FormControl><Input placeholder="e.g., 50 kg or $5000" {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )}/>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField control={form.control} name="category" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Category</FormLabel>
+                   <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      {resourceCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}/>
+              <FormField control={form.control} name="status" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Status</FormLabel>
+                   <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      {resourceStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}/>
+            </div>
+            <DialogFooter>
+               <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
+              <Button type="submit" disabled={form.formState.isSubmitting}>
+                 {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 
 // --- MAIN COMPONENT ---
 export default function ResourcesPage() {
@@ -258,7 +364,8 @@ export default function ResourcesPage() {
                   <TableHead>Resource</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Quantity / Value</TableHead>
-                  <TableHead className="text-right">Status</TableHead>
+                  <TableHead>Status</TableHead>
+                  {user?.role === 'Admin' && <TableHead className="text-right">Actions</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -272,11 +379,16 @@ export default function ResourcesPage() {
                     </TableCell>
                     <TableCell>{resource.category}</TableCell>
                     <TableCell>{resource.quantity}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell>
                       <Badge variant={statusBadgeVariant[resource.status] || "outline"}>
                         {resource.status}
                       </Badge>
                     </TableCell>
+                    {user?.role === 'Admin' && (
+                        <TableCell className="text-right">
+                            <EditResourceDialog resource={resource} onResourceUpdated={fetchResources} />
+                        </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>

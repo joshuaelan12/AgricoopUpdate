@@ -66,8 +66,16 @@ export const CreateResourceInputSchema = z.object({
   status: z.enum(["In Stock", "Good", "In Use", "On Track", "Low Stock", "Needs Maintenance"]),
   companyId: z.string(),
 });
-
 export type CreateResourceInput = z.infer<typeof CreateResourceInputSchema>;
+
+export const UpdateResourceInputSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1, "Resource name is required."),
+  category: z.enum(["Inputs", "Equipment", "Infrastructure", "Finance"]),
+  quantity: z.string().min(1, "Quantity or value is required."),
+  status: z.enum(["In Stock", "Good", "In Use", "On Track", "Low Stock", "Needs Maintenance"]),
+});
+export type UpdateResourceInput = z.infer<typeof UpdateResourceInputSchema>;
 
 
 // --- Auth Schemas ---
