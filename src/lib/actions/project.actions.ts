@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import { adminDb, FieldValue } from '@/lib/firebase-admin';
 import { revalidatePath } from 'next/cache';
-import { CreateProjectInputSchema, UpdateProjectProgressInputSchema, AddProjectCommentInputSchema, DeleteProjectCommentInputSchema, type CreateProjectInput, type UpdateProjectProgressInput, type AddProjectCommentInput, type DeleteProjectCommentInput, UpdateProjectInputSchema, DeleteProjectInputSchema, type UpdateProjectInput, type DeleteProjectInput } from '@/lib/schemas';
+import { CreateProjectInputSchema, UpdateProjectProgressInputSchema, AddProjectCommentInputSchema, DeleteProjectCommentInputSchema, type CreateProjectInput, type UpdateProjectProgressInput, type AddProjectCommentInput, type DeleteProjectCommentInput, UpdateProjectInputSchema, DeleteProjectInputSchema, type UpdateProjectInput, type DeleteProjectInput, UpdateProjectStatusInputSchema, type UpdateProjectStatusInput } from '@/lib/schemas';
 
 // --- SERVER ACTION ---
 export async function createProject(input: CreateProjectInput) {
@@ -183,6 +183,32 @@ export async function deleteProject(input: DeleteProjectInput) {
 
     } catch (error: any) {
         console.error("Error deleting project:", error);
+        if (error instanceof z.ZodError) {
+            return { success: false, error: "Validation failed.", issues: error.flatten() };
+        }
+        return { success: false, error: error.message || "An unknown error occurred." };
+    }
+}
+
+export async function updateProjectStatus(input: UpdateProjectStatusInput) {
+    try {
+        const validatedInput = UpdateProjectStatusInputSchema.parse(input);
+        const { projectId, status } = validatedInput;
+
+        const projectRef = adminDb.collection('projects').doc(projectId);
+
+        await projectRef.update({
+            status: status,
+            updatedAt: FieldValue.serverTimestamp(),
+        });
+
+        revalidatePath('/projects');
+        revalidatePath('/'); // Dashboard might show project statuses
+
+        return { success: true };
+
+    } catch (error: any) {
+        console.error("Error updating project status:", error);
         if (error instanceof z.ZodError) {
             return { success: false, error: "Validation failed.", issues: error.flatten() };
         }

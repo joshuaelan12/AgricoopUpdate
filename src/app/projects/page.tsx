@@ -10,7 +10,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
-import { createProject, updateProjectProgress, addProjectComment, deleteProjectComment, updateProject, deleteProject } from "@/lib/actions/project.actions";
+import { createProject, updateProjectProgress, addProjectComment, deleteProjectComment, updateProject, deleteProject, updateProjectStatus } from "@/lib/actions/project.actions";
 import { CreateProjectInputSchema, AddProjectCommentInputSchema, UpdateProjectInputSchema } from "@/lib/schemas";
 import type { AddProjectCommentInput, UpdateProjectInput } from "@/lib/schemas";
 import { useToast } from "@/hooks/use-toast";
@@ -60,7 +60,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuCheckboxItem, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 
@@ -109,6 +109,8 @@ const statusColors: { [key: string]: string } = {
   "Planning": "bg-gray-500",
   "Delayed": "bg-red-500",
 };
+
+const projectStatuses: Project['status'][] = ["Planning", "In Progress", "On Hold", "Delayed", "Completed"];
 
 // --- SKELETON COMPONENT ---
 const ProjectCardSkeleton = () => (
@@ -219,7 +221,7 @@ function CreateProjectDialog({ users, companyId }: CreateProjectDialogProps) {
                    <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl><SelectTrigger><SelectValue placeholder="Select a status" /></SelectTrigger></FormControl>
                     <SelectContent>
-                      {["Planning", "In Progress", "On Hold", "Delayed", "Completed"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                      {projectStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -422,6 +424,7 @@ export default function ProjectsPage() {
   const [users, setUsers] = useState<{ [uid: string]: UserData }>({});
   const [loading, setLoading] = useState(true);
   const [updatingProgressId, setUpdatingProgressId] = useState<string | null>(null);
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
   const [liveProgress, setLiveProgress] = useState<{ [projectId: string]: number }>({});
   const [newComments, setNewComments] = useState<{ [key: string]: string }>({});
   const [isSubmittingComment, setIsSubmittingComment] = useState<string | null>(null);
@@ -534,6 +537,25 @@ export default function ProjectsPage() {
     setIsDeletingComment(null);
   };
   
+  const handleStatusChange = async (projectId: string, newStatus: Project['status']) => {
+    setUpdatingStatusId(projectId);
+    const result = await updateProjectStatus({
+        projectId: projectId,
+        status: newStatus,
+    });
+    if (result.success) {
+        toast({ title: "Status Updated" });
+        router.refresh();
+    } else {
+        toast({
+            variant: "destructive",
+            title: "Update Failed",
+            description: result.error,
+        });
+    }
+    setUpdatingStatusId(null);
+  };
+
   return (
     <div>
       <div className="flex justify-between items-center mb-8">
@@ -582,7 +604,36 @@ export default function ProjectsPage() {
                   <div className="flex justify-between items-start gap-4">
                       <div className="flex-1">
                         <CardTitle className="font-headline text-2xl">{project.title}</CardTitle>
-                        <Badge className={`${statusColors[project.status]} text-primary-foreground mt-1`}>{project.status}</Badge>
+                        {canUpdate ? (
+                          <Select
+                            value={project.status}
+                            disabled={updatingStatusId === project.id}
+                            onValueChange={(newStatus: Project['status']) => handleStatusChange(project.id, newStatus)}
+                          >
+                            <SelectTrigger className="w-[180px] mt-1 h-9">
+                              <div className="flex items-center gap-2">
+                                {updatingStatusId === project.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <span className={`h-2 w-2 rounded-full ${statusColors[project.status]}`} />
+                                )}
+                                <SelectValue />
+                              </div>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {projectStatuses.map(s => (
+                                <SelectItem key={s} value={s}>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`h-2 w-2 rounded-full ${statusColors[s]}`} />
+                                    {s}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Badge className={`${statusColors[project.status]} text-primary-foreground mt-1`}>{project.status}</Badge>
+                        )}
                       </div>
                       {user?.role === 'Admin' && <ProjectActions project={project} onActionComplete={() => router.refresh()} />}
                   </div>

@@ -68,6 +68,12 @@ export const DeleteProjectInputSchema = z.object({
 });
 export type DeleteProjectInput = z.infer<typeof DeleteProjectInputSchema>;
 
+export const UpdateProjectStatusInputSchema = z.object({
+  projectId: z.string(),
+  status: z.enum(["Planning", "In Progress", "On Hold", "Completed", "Delayed"]),
+});
+export type UpdateProjectStatusInput = z.infer<typeof UpdateProjectStatusInputSchema>;
+
 
 // --- Resource Schemas ---
 
