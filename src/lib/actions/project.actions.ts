@@ -190,7 +190,23 @@ export async function updateProject(input: UpdateProjectInput, actorName: string
             updatedAt: FieldValue.serverTimestamp(),
         });
         
-        await logActivity(projectData.companyId, `${actorName} edited the details of project "${validatedInput.title}".`);
+        const changes = [];
+        if (updateData.title !== projectData.title) {
+            changes.push(`renamed it to "${updateData.title}"`);
+        }
+        if (updateData.description !== projectData.description) {
+            changes.push("updated the description");
+        }
+        
+        let logMessage;
+        if (changes.length > 0) {
+            logMessage = `${actorName} updated project "${projectData.title}": ${changes.join(' and ')}.`;
+        } else {
+            // No details changed, but the action was still triggered.
+            logMessage = `${actorName} reviewed the details for project "${projectData.title}".`;
+        }
+        await logActivity(projectData.companyId, logMessage);
+
         revalidatePath('/projects');
         
         return { success: true };
@@ -280,7 +296,32 @@ export async function updateProjectPlanning(input: UpdateProjectPlanningInput, a
             updatedAt: FieldValue.serverTimestamp(),
         });
         
-        await logActivity(projectData.companyId, `${actorName} updated the plan for project "${projectData.title}".`);
+        const changes = [];
+        if (planningData.priority && planningData.priority !== projectData.priority) {
+            changes.push(`set priority to "${planningData.priority}"`);
+        }
+        // Firestore timestamps and JS dates need careful comparison
+        const oldDeadline = projectData.deadline?.toDate();
+        if (planningData.deadline?.getTime() !== oldDeadline?.getTime()) {
+             changes.push(`set deadline to ${planningData.deadline!.toLocaleDateString()}`);
+        }
+        if (planningData.estimatedBudget && planningData.estimatedBudget !== projectData.estimatedBudget) {
+             changes.push(`set budget to $${planningData.estimatedBudget.toLocaleString()}`);
+        }
+        if (planningData.objectives && planningData.objectives !== projectData.objectives) {
+            changes.push('updated objectives');
+        }
+        if (planningData.expectedOutcomes && planningData.expectedOutcomes !== projectData.expectedOutcomes) {
+            changes.push('updated expected outcomes');
+        }
+
+        if (changes.length > 0) {
+            const logMessage = `${actorName} updated project "${projectData.title}": ${changes.join(', ')}.`;
+            await logActivity(projectData.companyId, logMessage);
+        } else {
+             await logActivity(projectData.companyId, `${actorName} reviewed the plan for project "${projectData.title}".`);
+        }
+        
         revalidatePath('/planning');
         
         return { success: true };
