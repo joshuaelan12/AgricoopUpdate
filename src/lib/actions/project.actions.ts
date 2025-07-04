@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import { adminDb, FieldValue } from '@/lib/firebase-admin';
 import { revalidatePath } from 'next/cache';
-import { CreateProjectInputSchema, UpdateProjectProgressInputSchema, AddProjectCommentInputSchema, DeleteProjectCommentInputSchema, type CreateProjectInput, type UpdateProjectProgressInput, type AddProjectCommentInput, type DeleteProjectCommentInput } from '@/lib/schemas';
+import { CreateProjectInputSchema, UpdateProjectProgressInputSchema, AddProjectCommentInputSchema, DeleteProjectCommentInputSchema, type CreateProjectInput, type UpdateProjectProgressInput, type AddProjectCommentInput, type DeleteProjectCommentInput, UpdateProjectInputSchema, DeleteProjectInputSchema, type UpdateProjectInput, type DeleteProjectInput } from '@/lib/schemas';
 
 // --- SERVER ACTION ---
 export async function createProject(input: CreateProjectInput) {
@@ -135,6 +135,54 @@ export async function deleteProjectComment(input: DeleteProjectCommentInput) {
 
     } catch (error: any) {
         console.error("Error deleting comment:", error);
+        if (error instanceof z.ZodError) {
+            return { success: false, error: "Validation failed.", issues: error.flatten() };
+        }
+        return { success: false, error: error.message || "An unknown error occurred." };
+    }
+}
+
+export async function updateProject(input: UpdateProjectInput) {
+    try {
+        const validatedInput = UpdateProjectInputSchema.parse(input);
+        const { id, ...updateData } = validatedInput;
+
+        const projectRef = adminDb.collection('projects').doc(id);
+        
+        await projectRef.update({
+            ...updateData,
+            updatedAt: FieldValue.serverTimestamp(),
+        });
+        
+        revalidatePath('/projects');
+        
+        return { success: true };
+
+    } catch (error: any) {
+        console.error("Error updating project:", error);
+        if (error instanceof z.ZodError) {
+            return { success: false, error: "Validation failed.", issues: error.flatten() };
+        }
+        return { success: false, error: error.message || "An unknown error occurred." };
+    }
+}
+
+export async function deleteProject(input: DeleteProjectInput) {
+    try {
+        const validatedInput = DeleteProjectInputSchema.parse(input);
+        const { projectId } = validatedInput;
+
+        const projectRef = adminDb.collection('projects').doc(projectId);
+        
+        await projectRef.delete();
+        
+        revalidatePath('/projects');
+        revalidatePath('/');
+        
+        return { success: true };
+
+    } catch (error: any) {
+        console.error("Error deleting project:", error);
         if (error instanceof z.ZodError) {
             return { success: false, error: "Validation failed.", issues: error.flatten() };
         }

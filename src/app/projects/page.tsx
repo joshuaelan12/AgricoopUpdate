@@ -10,9 +10,9 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
-import { createProject, updateProjectProgress, addProjectComment, deleteProjectComment } from "@/lib/actions/project.actions";
-import { CreateProjectInputSchema, AddProjectCommentInputSchema } from "@/lib/schemas";
-import type { AddProjectCommentInput } from "@/lib/schemas";
+import { createProject, updateProjectProgress, addProjectComment, deleteProjectComment, updateProject, deleteProject } from "@/lib/actions/project.actions";
+import { CreateProjectInputSchema, AddProjectCommentInputSchema, UpdateProjectInputSchema } from "@/lib/schemas";
+import type { AddProjectCommentInput, UpdateProjectInput } from "@/lib/schemas";
 import { useToast } from "@/hooks/use-toast";
 
 import {
@@ -60,11 +60,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 
-import { FolderKanban, PlusCircle, Users as UsersIcon, ChevronDown, Loader2, MessageSquare, Trash2 } from "lucide-react";
+import { FolderKanban, PlusCircle, Users as UsersIcon, ChevronDown, Loader2, MessageSquare, Trash2, MoreVertical, Edit } from "lucide-react";
 
 
 // --- DATA INTERFACES ---
@@ -273,6 +273,145 @@ function CreateProjectDialog({ users, companyId }: CreateProjectDialogProps) {
   )
 }
 
+// --- PROJECT ACTIONS (EDIT/DELETE) COMPONENT ---
+function EditProjectDialog({ project, onActionComplete }: { project: Project, onActionComplete: () => void }) {
+  const [open, setOpen] = useState(false);
+  const { toast } = useToast();
+  
+  const form = useForm<UpdateProjectInput>({
+    resolver: zodResolver(UpdateProjectInputSchema),
+    defaultValues: {
+      id: project.id,
+      title: project.title,
+      description: project.description,
+    },
+  });
+
+  const onSubmit = async (values: UpdateProjectInput) => {
+    const result = await updateProject(values);
+    if (result.success) {
+      toast({
+        title: "Project Updated",
+        description: `"${values.title}" has been successfully updated.`,
+      });
+      setOpen(false);
+      onActionComplete();
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Update Failed",
+        description: result.error || "An unexpected error occurred.",
+      });
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+            <Edit className="mr-2 h-4 w-4" />
+            <span>Edit Project</span>
+        </DropdownMenuItem>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle className="font-headline text-2xl">Edit Project</DialogTitle>
+          <DialogDescription>
+            Make changes to your project here. Click save when you're done.
+          </DialogDescription>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField control={form.control} name="title" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Project Title</FormLabel>
+                <FormControl><Input placeholder="e.g., Spring Planting Initiative" {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )}/>
+            <FormField control={form.control} name="description" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Description</FormLabel>
+                <FormControl><Textarea placeholder="Describe the project's goals and scope." {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )}/>
+            <DialogFooter>
+               <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
+              <Button type="submit" disabled={form.formState.isSubmitting}>
+                 {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ProjectActions({ project, onActionComplete }: { project: Project; onActionComplete: () => void }) {
+  const { toast } = useToast();
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    const result = await deleteProject({ projectId: project.id });
+    if (result.success) {
+      toast({
+        title: "Project Deleted",
+        description: `"${project.title}" has been successfully deleted.`,
+      });
+      onActionComplete();
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Deletion Failed",
+        description: result.error || "An unexpected error occurred.",
+      });
+    }
+    setIsDeleting(false);
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0">
+          <MoreVertical className="h-4 w-4" />
+          <span className="sr-only">More options</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <EditProjectDialog project={project} onActionComplete={onActionComplete} />
+        <DropdownMenuSeparator />
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+             <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive">
+                <Trash2 className="mr-2 h-4 w-4" />
+                <span>Delete Project</span>
+             </DropdownMenuItem>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the project and all associated data.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDelete} disabled={isDeleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 
 // --- MAIN COMPONENT ---
 export default function ProjectsPage() {
@@ -440,11 +579,14 @@ export default function ProjectsPage() {
             return (
               <Card key={project.id} className="flex flex-col">
                 <CardHeader>
-                  <div className="flex justify-between items-start">
-                      <CardTitle className="font-headline text-2xl">{project.title}</CardTitle>
-                      <Badge className={`${statusColors[project.status]} text-primary-foreground`}>{project.status}</Badge>
+                  <div className="flex justify-between items-start gap-4">
+                      <div className="flex-1">
+                        <CardTitle className="font-headline text-2xl">{project.title}</CardTitle>
+                        <Badge className={`${statusColors[project.status]} text-primary-foreground mt-1`}>{project.status}</Badge>
+                      </div>
+                      {user?.role === 'Admin' && <ProjectActions project={project} onActionComplete={() => router.refresh()} />}
                   </div>
-                  <CardDescription>{project.description}</CardDescription>
+                  <CardDescription className="pt-2">{project.description}</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow flex flex-col">
                   <div className="flex-grow">

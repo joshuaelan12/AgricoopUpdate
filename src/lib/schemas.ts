@@ -56,6 +56,18 @@ export const DeleteProjectCommentInputSchema = z.object({
 });
 export type DeleteProjectCommentInput = z.infer<typeof DeleteProjectCommentInputSchema>;
 
+export const UpdateProjectInputSchema = z.object({
+  id: z.string(),
+  title: z.string().min(1, "Title is required."),
+  description: z.string().min(1, "Description is required."),
+});
+export type UpdateProjectInput = z.infer<typeof UpdateProjectInputSchema>;
+
+export const DeleteProjectInputSchema = z.object({
+  projectId: z.string(),
+});
+export type DeleteProjectInput = z.infer<typeof DeleteProjectInputSchema>;
+
 
 // --- Resource Schemas ---
 
