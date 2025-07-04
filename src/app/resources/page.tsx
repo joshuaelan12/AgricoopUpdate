@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -80,9 +81,8 @@ const resourceStatuses = ["In Stock", "Good", "In Use", "On Track", "Low Stock",
 
 
 // --- ADD RESOURCE DIALOG ---
-function AddResourceDialog({ companyId }: { companyId: string }) {
+function AddResourceDialog({ companyId, onResourceAdded }: { companyId: string, onResourceAdded: () => void }) {
   const [open, setOpen] = useState(false);
-  const router = useRouter();
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof CreateResourceInputSchema>>({
@@ -110,7 +110,7 @@ function AddResourceDialog({ companyId }: { companyId: string }) {
         companyId: companyId
       });
       setOpen(false);
-      router.refresh(); 
+      onResourceAdded();
     } else {
       toast({
         variant: "destructive",
@@ -198,35 +198,35 @@ export default function ResourcesPage() {
   const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchResources = async () => {
-      if (!user?.companyId) {
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
+  const fetchResources = useCallback(async () => {
+    if (!user?.companyId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
 
-      try {
-        const resourcesRef = collection(db, 'resources');
-        const q = query(resourcesRef, where('companyId', '==', user.companyId));
-        const querySnapshot = await getDocs(q);
-        
-        const resourcesData = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Resource[];
-        
-        setResources(resourcesData);
-      } catch (error) {
-        console.error("Error fetching resources:", error);
-        setResources([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchResources();
+    try {
+      const resourcesRef = collection(db, 'resources');
+      const q = query(resourcesRef, where('companyId', '==', user.companyId));
+      const querySnapshot = await getDocs(q);
+      
+      const resourcesData = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Resource[];
+      
+      setResources(resourcesData);
+    } catch (error) {
+      console.error("Error fetching resources:", error);
+      setResources([]);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
+
+  useEffect(() => {
+    fetchResources();
+  }, [fetchResources]);
 
   if (loading) {
     return <ResourcesSkeleton />;
@@ -242,7 +242,7 @@ export default function ResourcesPage() {
           </p>
         </div>
         {user && (user.role === 'Admin' || user.role === 'Project Manager') && (
-            <AddResourceDialog companyId={user.companyId} />
+            <AddResourceDialog companyId={user.companyId} onResourceAdded={fetchResources} />
         )}
       </div>
       <Card>
