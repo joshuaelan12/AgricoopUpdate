@@ -15,6 +15,7 @@ import {
   GanttChartSquare,
   History,
   ClipboardList,
+  Sheet,
 } from 'lucide-react';
 import { SidebarProvider, Sidebar, SidebarTrigger, SidebarInset, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
@@ -107,6 +108,14 @@ function AppLayout({ children }: { children: React.ReactNode }) {
                                 <Link href="/activity-log">
                                     <History />
                                     <span>Activity Log</span>
+                                </Link>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                           <SidebarMenuButton asChild tooltip="Reports" isActive={isActive('/reports')}>
+                                <Link href="/reports">
+                                    <Sheet />
+                                    <span>Reports</span>
                                 </Link>
                             </SidebarMenuButton>
                         </SidebarMenuItem>
