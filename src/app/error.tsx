@@ -4,7 +4,6 @@ import { useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { AlertTriangle } from 'lucide-react'
-import FirebaseConfigError from '@/components/firebase-config-error'
 
 export default function Error({
   error,
@@ -18,11 +17,8 @@ export default function Error({
     console.error(error)
   }, [error])
 
-  const isFirebaseConfigError = error.message.includes('Firebase client configuration is missing');
-
-  if (isFirebaseConfigError) {
-    return <FirebaseConfigError onTryAgain={reset} />;
-  }
+  // Since Firebase config is now hardcoded, the special check for it is removed.
+  // We can add more specific error handlers here in the future if needed.
 
   // Generic fallback error
   return (

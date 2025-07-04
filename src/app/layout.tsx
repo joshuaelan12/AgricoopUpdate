@@ -186,19 +186,9 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  let hasFirebaseConfigError = false;
-  try {
-    // This check must be wrapped in a try/catch in the RootLayout
-    // because it cannot be caught by the error.tsx boundary.
-    checkFirebaseConfig();
-  } catch (error: any) {
-    if (error.message.includes('Firebase client configuration is missing')) {
-      hasFirebaseConfigError = true;
-    } else {
-      // For any other error, re-throw it to be handled by Next.js.
-      throw error;
-    }
-  }
+  // With a hardcoded Firebase config, the elaborate check is no longer needed here.
+  // The check function is kept for compatibility but doesn't need to be called in a try/catch.
+  checkFirebaseConfig();
 
   return (
     <html lang="en">
@@ -210,11 +200,7 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..900;1,400..900&family=Belleza&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased">
-        {hasFirebaseConfigError ? (
-          <FirebaseConfigError />
-        ) : (
-          <AuthAndRoutingController>{children}</AuthAndRoutingController>
-        )}
+        <AuthAndRoutingController>{children}</AuthAndRoutingController>
         <Toaster />
       </body>
     </html>
