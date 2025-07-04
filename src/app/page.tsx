@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -64,6 +65,13 @@ interface ResourceAllocation {
     fertilizer: number;
 }
 
+interface ResourceData {
+  name: string;
+  category: string;
+  quantity: number | string; // Handle both types for safety during transition
+  status: string;
+}
+
 const statusVariant: { [key: string]: "default" | "secondary" | "destructive" | "outline" } = {
   "Completed": "default",
   "In Progress": "outline",
@@ -97,7 +105,7 @@ export default function Dashboard() {
           // --- DEFINE QUERIES ---
           const projectsQuery = query(projectsRef, where('companyId', '==', companyId));
           const membersQuery = query(usersRef, where('companyId', '==', companyId));
-          const resourceAlertsQuery = query(resourcesRef, where('companyId', '==', companyId), where('status', 'in', ['Low Stock', 'Needs Maintenance']));
+          const allResourcesQuery = query(resourcesRef, where('companyId', '==', companyId));
           
           const sevenDaysFromNow = new Date();
           sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
@@ -113,20 +121,37 @@ export default function Dashboard() {
 
           // --- EXECUTE QUERIES ---
           const [
-            projectsSnap, membersSnap, resourcesAlertsSnap, tasksDueSoonSnap,
+            projectsSnap, membersSnap, allResourcesSnap, tasksDueSoonSnap,
             recentTasksSnap, projectProgressSnap, resourceAllocationSnap
           ] = await Promise.all([
-            getDocs(projectsQuery), getDocs(membersQuery), getDocs(resourceAlertsQuery), getDocs(tasksDueSoonSnap),
+            getDocs(projectsQuery), getDocs(membersQuery), getDocs(allResourcesQuery), getDocs(tasksDueSoonSnap),
             getDocs(recentTasksQuery), getDocs(projectProgressQuery), getDocs(resourceAllocationQuery)
           ]);
           
           // --- PROCESS & SET STATE ---
+
+          // New Resource Alert Logic
+          const LOW_STOCK_THRESHOLD = 10;
+          const allResources = allResourcesSnap.docs.map(doc => doc.data()) as ResourceData[];
+
+          const lowStockResources = allResources.filter(
+            r => r.category === 'Inputs' && typeof r.quantity === 'number' && r.quantity < LOW_STOCK_THRESHOLD
+          );
+          const needsMaintenanceResources = allResources.filter(
+            r => r.status === 'Needs Maintenance'
+          );
+
+          const alertItems = [
+            ...lowStockResources.map(r => r.name),
+            ...needsMaintenanceResources.map(r => r.name)
+          ];
+
           setStats({
             totalProjects: projectsSnap.size,
             activeMembers: membersSnap.size,
-            resourceAlerts: resourcesAlertsSnap.size,
+            resourceAlerts: lowStockResources.length + needsMaintenanceResources.length,
             tasksDueSoon: tasksDueSoonSnap.size,
-            lowStockItems: resourcesAlertsSnap.docs.map(doc => doc.data().name),
+            lowStockItems: alertItems,
           });
 
           setRecentTasks(recentTasksSnap.docs.map(doc => ({ ...doc.data(), id: doc.id, updatedAt: doc.data().updatedAt.toDate() })) as RecentTask[]);
@@ -162,9 +187,10 @@ export default function Dashboard() {
   }
   
   const resourceAlertText = () => {
-      if (!stats || stats.resourceAlerts === 0) return "All resources are stocked";
-      const items = stats.lowStockItems.slice(0, 2).join(' and ');
-      return `Low on ${items}`;
+      if (!stats || stats.resourceAlerts === 0) return "All resources are in good condition";
+      const items = stats.lowStockItems.slice(0, 2).join(', ');
+      const moreItems = stats.lowStockItems.length > 2 ? '...' : '';
+      return `Attention needed for: ${items}${moreItems}`;
   };
 
   return (

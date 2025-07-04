@@ -60,7 +60,7 @@ interface Resource {
     id: string;
     name: string;
     category: "Inputs" | "Equipment" | "Infrastructure" | "Finance" | string;
-    quantity: string;
+    quantity: number;
     status: string;
 }
 
@@ -91,7 +91,7 @@ function AddResourceDialog({ companyId, onResourceAdded }: { companyId: string, 
     defaultValues: {
       name: "",
       category: "Inputs",
-      quantity: "",
+      quantity: 0,
       status: "In Stock",
       companyId: companyId,
     },
@@ -104,12 +104,7 @@ function AddResourceDialog({ companyId, onResourceAdded }: { companyId: string, 
         title: "Resource Added",
         description: `"${values.name}" has been successfully added to your inventory.`,
       });
-      form.reset({
-        ...form.getValues(),
-        name: "",
-        quantity: "",
-        companyId: companyId
-      });
+      form.reset();
       setOpen(false);
       onResourceAdded();
     } else {
@@ -147,8 +142,8 @@ function AddResourceDialog({ companyId, onResourceAdded }: { companyId: string, 
             )}/>
             <FormField control={form.control} name="quantity" render={({ field }) => (
               <FormItem>
-                <FormLabel>Quantity / Value</FormLabel>
-                <FormControl><Input placeholder="e.g., 50 kg or $5000" {...field} /></FormControl>
+                <FormLabel>Quantity (kg)</FormLabel>
+                <FormControl><Input type="number" placeholder="e.g., 50" {...field} /></FormControl>
                 <FormMessage />
               </FormItem>
             )}/>
@@ -252,8 +247,8 @@ function EditResourceDialog({ resource, onResourceUpdated }: { resource: Resourc
             )}/>
             <FormField control={form.control} name="quantity" render={({ field }) => (
               <FormItem>
-                <FormLabel>Quantity / Value</FormLabel>
-                <FormControl><Input placeholder="e.g., 50 kg or $5000" {...field} /></FormControl>
+                <FormLabel>Quantity (kg)</FormLabel>
+                <FormControl><Input type="number" placeholder="e.g., 50" {...field} /></FormControl>
                 <FormMessage />
               </FormItem>
             )}/>
@@ -363,7 +358,7 @@ export default function ResourcesPage() {
                 <TableRow>
                   <TableHead>Resource</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead>Quantity / Value</TableHead>
+                  <TableHead>Quantity</TableHead>
                   <TableHead>Status</TableHead>
                   {user?.role === 'Admin' && <TableHead className="text-right">Actions</TableHead>}
                 </TableRow>
@@ -378,7 +373,7 @@ export default function ResourcesPage() {
                       </div>
                     </TableCell>
                     <TableCell>{resource.category}</TableCell>
-                    <TableCell>{resource.quantity}</TableCell>
+                    <TableCell>{resource.quantity} kg</TableCell>
                     <TableCell>
                       <Badge variant={statusBadgeVariant[resource.status] || "outline"}>
                         {resource.status}
