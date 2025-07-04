@@ -116,7 +116,7 @@ export default function Dashboard() {
             projectsSnap, membersSnap, resourcesAlertsSnap, tasksDueSoonSnap,
             recentTasksSnap, projectProgressSnap, resourceAllocationSnap
           ] = await Promise.all([
-            getDocs(projectsQuery), getDocs(membersQuery), getDocs(resourceAlertsQuery), getDocs(tasksDueSoonQuery),
+            getDocs(projectsQuery), getDocs(membersQuery), getDocs(resourceAlertsQuery), getDocs(tasksDueSoonSnap),
             getDocs(recentTasksQuery), getDocs(projectProgressQuery), getDocs(resourceAllocationQuery)
           ]);
           
@@ -137,16 +137,25 @@ export default function Dashboard() {
 
         } catch (error) {
           console.error("Error fetching dashboard data:", error);
+           setStats(null);
+           setRecentTasks([]);
+           setProjectProgress([]);
+           setResourceAllocation([]);
         } finally {
           setLoading(false);
         }
       };
 
       fetchDashboardData();
-    } else if (!user && loading) {
+    } else {
+      // No user, so not loading and clear all data.
+      setStats(null);
+      setRecentTasks([]);
+      setProjectProgress([]);
+      setResourceAllocation([]);
       setLoading(false);
     }
-  }, [user, loading]);
+  }, [user]);
 
   if (loading) {
     return <DashboardSkeleton />;
