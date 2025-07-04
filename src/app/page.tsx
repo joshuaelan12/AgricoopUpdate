@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, limit, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, query, where, limit, orderBy, onSnapshot } from 'firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
 import {
   Card,
@@ -39,7 +39,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 // --- DATA INTERFACES ---
 interface DashboardStats {
   totalProjects: number;
-  tasksDueSoon: number;
   activeMembers: number;
   resourceAlerts: number;
   lowStockItems: string[];
@@ -68,7 +67,7 @@ interface ResourceAllocation {
 interface ResourceData {
   name: string;
   category: string;
-  quantity: number | string; // Handle both types for safety during transition
+  quantity: number | string;
   status: string;
 }
 
@@ -82,104 +81,110 @@ const statusVariant: { [key: string]: "default" | "secondary" | "destructive" | 
 // --- MAIN COMPONENT ---
 export default function Dashboard() {
   const { user } = useAuth();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [stats, setStats] = useState<DashboardStats>({
+    totalProjects: 0,
+    activeMembers: 0,
+    resourceAlerts: 0,
+    lowStockItems: [],
+  });
   const [recentTasks, setRecentTasks] = useState<RecentTask[]>([]);
   const [projectProgress, setProjectProgress] = useState<ProjectProgress[]>([]);
   const [resourceAllocation, setResourceAllocation] = useState<ResourceAllocation[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user?.companyId) {
-      const fetchDashboardData = async () => {
-        setLoading(true);
-        try {
-          const { companyId } = user;
-
-          // --- DEFINE REFS ---
-          const projectsRef = collection(db, 'projects');
-          const usersRef = collection(db, 'users');
-          const resourcesRef = collection(db, 'resources');
-          const tasksRef = collection(db, 'tasks');
-          const resourceUsageRef = collection(db, 'resourceUsage');
-          
-          // --- DEFINE QUERIES ---
-          const projectsQuery = query(projectsRef, where('companyId', '==', companyId));
-          const membersQuery = query(usersRef, where('companyId', '==', companyId));
-          const allResourcesQuery = query(resourcesRef, where('companyId', '==', companyId));
-          
-          const sevenDaysFromNow = new Date();
-          sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
-          const tasksDueSoonQuery = query(tasksRef, 
-            where('companyId', '==', companyId),
-            where('status', '!=', 'Completed'),
-            where('dueDate', '<=', Timestamp.fromDate(sevenDaysFromNow))
-          );
-          
-          const recentTasksQuery = query(tasksRef, where('companyId', '==', companyId), orderBy('updatedAt', 'desc'), limit(5));
-          const projectProgressQuery = query(projectsRef, where('companyId', '==', companyId), where('status', 'in', ['In Progress', 'On Hold', 'Delayed']), limit(5));
-          const resourceAllocationQuery = query(resourceUsageRef, where('companyId', '==', companyId), orderBy('monthIndex', 'asc'), limit(6));
-
-          // --- EXECUTE QUERIES ---
-          const [
-            projectsSnap, membersSnap, allResourcesSnap, tasksDueSoonSnap,
-            recentTasksSnap, projectProgressSnap, resourceAllocationSnap
-          ] = await Promise.all([
-            getDocs(projectsQuery), getDocs(membersQuery), getDocs(allResourcesQuery), getDocs(tasksDueSoonSnap),
-            getDocs(recentTasksQuery), getDocs(projectProgressQuery), getDocs(resourceAllocationQuery)
-          ]);
-          
-          // --- PROCESS & SET STATE ---
-
-          // New Resource Alert Logic
-          const LOW_STOCK_THRESHOLD = 10;
-          const allResources = allResourcesSnap.docs.map(doc => doc.data()) as ResourceData[];
-
-          const lowStockResources = allResources.filter(
-            r => r.category === 'Inputs' && typeof r.quantity === 'number' && r.quantity < LOW_STOCK_THRESHOLD
-          );
-          const needsMaintenanceResources = allResources.filter(
-            r => r.status === 'Needs Maintenance'
-          );
-
-          const alertItems = [
-            ...lowStockResources.map(r => r.name),
-            ...needsMaintenanceResources.map(r => r.name)
-          ];
-
-          setStats({
-            totalProjects: projectsSnap.size,
-            activeMembers: membersSnap.size,
-            resourceAlerts: lowStockResources.length + needsMaintenanceResources.length,
-            tasksDueSoon: tasksDueSoonSnap.size,
-            lowStockItems: alertItems,
-          });
-
-          setRecentTasks(recentTasksSnap.docs.map(doc => ({ ...doc.data(), id: doc.id, updatedAt: doc.data().updatedAt.toDate() })) as RecentTask[]);
-          setProjectProgress(projectProgressSnap.docs.map(doc => ({ name: doc.data().title, progress: doc.data().progress })));
-
-          const allocationData = resourceAllocationSnap.docs.map(doc => doc.data() as ResourceAllocation);
-          setResourceAllocation(allocationData);
-
-        } catch (error) {
-          console.error("Error fetching dashboard data:", error);
-           setStats(null);
-           setRecentTasks([]);
-           setProjectProgress([]);
-           setResourceAllocation([]);
-        } finally {
-          setLoading(false);
-        }
-      };
-
-      fetchDashboardData();
-    } else {
-      // No user, so not loading and clear all data.
-      setStats(null);
+    if (!user?.companyId) {
+      setLoading(false);
+      setStats({ totalProjects: 0, activeMembers: 0, resourceAlerts: 0, lowStockItems: [] });
       setRecentTasks([]);
       setProjectProgress([]);
       setResourceAllocation([]);
-      setLoading(false);
+      return;
     }
+
+    setLoading(true);
+    const { companyId } = user;
+
+    const unsubscribes: (() => void)[] = [];
+
+    // --- DEFINE REFS ---
+    const projectsRef = collection(db, 'projects');
+    const usersRef = collection(db, 'users');
+    const resourcesRef = collection(db, 'resources');
+    const tasksRef = collection(db, 'tasks');
+    const resourceUsageRef = collection(db, 'resourceUsage');
+    
+    // --- REAL-TIME LISTENERS ---
+    
+    // Projects listener (for stats and progress chart)
+    const projectsQuery = query(projectsRef, where('companyId', '==', companyId));
+    unsubscribes.push(onSnapshot(projectsQuery, (snap) => {
+      setStats(prev => ({ ...prev!, totalProjects: snap.size }));
+      const activeProjects = snap.docs
+        .map(doc => doc.data())
+        .filter(p => ['In Progress', 'On Hold', 'Delayed'].includes(p.status))
+        .slice(0, 5)
+        .map(p => ({ name: p.title, progress: p.progress }));
+      setProjectProgress(activeProjects);
+    }));
+    
+    // Members listener (for stats)
+    const membersQuery = query(usersRef, where('companyId', '==', companyId));
+    unsubscribes.push(onSnapshot(membersQuery, (snap) => {
+      setStats(prev => ({ ...prev!, activeMembers: snap.size }));
+    }));
+    
+    // Resources listener (for stats)
+    const allResourcesQuery = query(resourcesRef, where('companyId', '==', companyId));
+    unsubscribes.push(onSnapshot(allResourcesQuery, (snap) => {
+      const LOW_STOCK_THRESHOLD = 10;
+      const allResources = snap.docs.map(doc => doc.data()) as ResourceData[];
+
+      const lowStockResources = allResources.filter(
+        r => r.category === 'Inputs' && typeof r.quantity === 'number' && r.quantity < LOW_STOCK_THRESHOLD
+      );
+      const needsMaintenanceResources = allResources.filter(
+        r => r.status === 'Needs Maintenance'
+      );
+
+      const alertItems = [
+        ...lowStockResources.map(r => r.name),
+        ...needsMaintenanceResources.map(r => r.name)
+      ];
+
+      setStats(prev => ({
+        ...prev,
+        resourceAlerts: lowStockResources.length + needsMaintenanceResources.length,
+        lowStockItems: alertItems,
+      }));
+    }));
+
+    // Recent tasks listener
+    const recentTasksQuery = query(tasksRef, where('companyId', '==', companyId), orderBy('updatedAt', 'desc'), limit(5));
+    unsubscribes.push(onSnapshot(recentTasksQuery, (snap) => {
+        const tasksData = snap.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                updatedAt: data.updatedAt?.toDate() // Safely convert timestamp
+            };
+        }).filter(t => t.updatedAt) as RecentTask[];
+      setRecentTasks(tasksData);
+    }));
+
+    // Resource allocation listener
+    const resourceAllocationQuery = query(resourceUsageRef, where('companyId', '==', companyId), orderBy('monthIndex', 'asc'), limit(6));
+    unsubscribes.push(onSnapshot(resourceAllocationQuery, (snap) => {
+      setResourceAllocation(snap.docs.map(doc => doc.data() as ResourceAllocation));
+    }));
+
+    setLoading(false);
+
+    // Cleanup function
+    return () => {
+      unsubscribes.forEach(unsub => unsub());
+    };
   }, [user]);
 
   if (loading) {
@@ -195,7 +200,7 @@ export default function Dashboard() {
 
   return (
     <div className="grid flex-1 items-start gap-4 md:gap-8">
-      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription className="font-headline">Total Projects</CardDescription>
@@ -204,17 +209,6 @@ export default function Dashboard() {
           <CardContent>
             <div className="text-xs text-muted-foreground">
               Managed by your cooperative
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="font-headline">Tasks Due Soon</CardDescription>
-            <CardTitle className="text-4xl font-headline">{stats?.tasksDueSoon ?? 0}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xs text-muted-foreground">
-              In the next 7 days
             </div>
           </CardContent>
         </Card>
@@ -346,8 +340,8 @@ export default function Dashboard() {
 // --- SKELETON COMPONENT ---
 const DashboardSkeleton = () => (
   <div className="grid flex-1 items-start gap-4 md:gap-8">
-    <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-      {[...Array(4)].map((_, i) => (
+    <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+      {[...Array(3)].map((_, i) => (
         <Card key={i}>
           <CardHeader className="pb-2">
             <Skeleton className="h-4 w-2/3" />
