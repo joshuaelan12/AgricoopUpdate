@@ -224,88 +224,97 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
-      <div className="grid gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-headline">Project Board</CardTitle>
-            <CardDescription>Drag to scroll through project statuses.</CardDescription>
-          </CardHeader>
-          <CardContent className="pl-0 pr-0">
-            <div className="overflow-x-auto">
-              <div className="flex gap-4 p-4 min-w-max">
-                {projectStatuses.map(status => (
-                    <div key={status} className="w-[280px] flex-shrink-0">
-                        <div className="flex items-center justify-between p-2 rounded-t-lg">
-                            <div className="flex items-center gap-2">
-                              <span className={`h-2.5 w-2.5 rounded-full ${statusColors[status]}`} />
-                              <h3 className="font-semibold text-foreground text-sm">{status}</h3>
-                            </div>
-                            <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-md">
-                                {projectsByStatus[status]?.length || 0}
-                            </span>
-                        </div>
-                        <div className="space-y-2 p-2 rounded-b-lg bg-muted/50 h-full min-h-[200px] max-h-[400px] overflow-y-auto">
-                            {(projectsByStatus[status] || []).map(project => (
-                                <Card key={project.id} className="p-3 bg-card hover:bg-card/90 cursor-pointer">
-                                    <p className="font-medium text-sm text-card-foreground">{project.title}</p>
-                                    <div className="flex items-center justify-between mt-2">
-                                        <span className="text-xs text-muted-foreground">{project.progress}% complete</span>
-                                    </div>
-                                     <Progress value={project.progress} className="mt-2 h-1.5" />
-                                </Card>
-                            ))}
-                            {(!projectsByStatus[status] || projectsByStatus[status].length === 0) && (
-                                <div className="text-center text-sm text-muted-foreground pt-10">
-                                    No projects here.
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-       <Card>
-          <CardHeader>
-            <CardTitle className="font-headline">Resource Allocation Summary</CardTitle>
-            <CardDescription>Total quantity of resources allocated across all projects.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {allocationSummary.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={allocationSummary} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis 
-                      dataKey="name" 
-                      stroke="hsl(var(--muted-foreground))" 
-                      fontSize={12} 
-                      tickLine={false} 
-                      axisLine={false}
-                    />
-                    <YAxis 
-                      stroke="hsl(var(--muted-foreground))" 
-                      fontSize={12} 
-                      tickLine={false} 
-                      axisLine={false}
-                      label={{ value: 'Quantity (kg)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' }, dy: 40 }}
-                    />
-                    <Tooltip 
-                      contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))" }}
-                      labelStyle={{ color: "hsl(var(--foreground))" }}
-                      cursor={{fill: 'hsl(var(--muted))'}}
-                    />
-                    <Bar dataKey="allocated" fill="hsl(var(--primary))" name="Allocated (kg)" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-            ) : (
-                <div className="flex justify-center items-center h-[300px] text-muted-foreground">
-                    No resources are currently allocated to projects.
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
+        <div className="lg:col-span-2">
+          <Card className="h-full">
+            <CardHeader>
+              <CardTitle className="font-headline">Project Board</CardTitle>
+              <CardDescription>Drag to scroll through project statuses.</CardDescription>
+            </CardHeader>
+            <CardContent className="pl-0 pr-0">
+              <div className="overflow-x-auto">
+                <div className="flex gap-4 p-4 min-w-max">
+                  {projectStatuses.map(status => (
+                      <div key={status} className="w-[280px] flex-shrink-0">
+                          <div className="flex items-center justify-between p-2 rounded-t-lg">
+                              <div className="flex items-center gap-2">
+                                <span className={`h-2.5 w-2.5 rounded-full ${statusColors[status]}`} />
+                                <h3 className="font-semibold text-foreground text-sm">{status}</h3>
+                              </div>
+                              <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-md">
+                                  {projectsByStatus[status]?.length || 0}
+                              </span>
+                          </div>
+                          <div className="space-y-2 p-2 rounded-b-lg bg-muted/50 h-full min-h-[200px] max-h-[400px] overflow-y-auto">
+                              {(projectsByStatus[status] || []).map(project => (
+                                  <Card key={project.id} className="p-3 bg-card hover:bg-card/90 cursor-pointer">
+                                      <p className="font-medium text-sm text-card-foreground">{project.title}</p>
+                                      <div className="flex items-center justify-between mt-2">
+                                          <span className="text-xs text-muted-foreground">{project.progress}% complete</span>
+                                      </div>
+                                      <Progress value={project.progress} className="mt-2 h-1.5" />
+                                  </Card>
+                              ))}
+                              {(!projectsByStatus[status] || projectsByStatus[status].length === 0) && (
+                                  <div className="text-center text-sm text-muted-foreground pt-10">
+                                      No projects here.
+                                  </div>
+                              )}
+                          </div>
+                      </div>
+                  ))}
                 </div>
-            )}
-          </CardContent>
-        </Card>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="lg:col-span-1">
+          <Card className="h-full">
+            <CardHeader>
+              <CardTitle className="font-headline">Resource Allocation Summary</CardTitle>
+              <CardDescription>Total quantity of resources allocated across all projects.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {allocationSummary.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={allocationSummary} margin={{ top: 5, right: 20, left: -10, bottom: 60 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis 
+                        dataKey="name" 
+                        stroke="hsl(var(--muted-foreground))" 
+                        fontSize={12} 
+                        tickLine={false} 
+                        axisLine={false}
+                        interval={0}
+                        angle={-45}
+                        textAnchor="end"
+                      />
+                      <YAxis 
+                        stroke="hsl(var(--muted-foreground))" 
+                        fontSize={12} 
+                        tickLine={false} 
+                        axisLine={false}
+                        label={{ value: 'Quantity', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                      />
+                      <Tooltip 
+                        contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))" }}
+                        labelStyle={{ color: "hsl(var(--foreground))" }}
+                        cursor={{fill: 'hsl(var(--muted))'}}
+                      />
+                      <Bar dataKey="allocated" fill="hsl(var(--primary))" name="Allocated (kg)" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+              ) : (
+                  <div className="flex justify-center items-center h-[300px] text-muted-foreground">
+                      No resources are currently allocated to projects.
+                  </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }
@@ -326,40 +335,44 @@ const DashboardSkeleton = () => (
         </Card>
       ))}
     </div>
-    <div className="grid gap-4">
-      <Card>
-        <CardHeader>
-          <Skeleton className="h-6 w-1/2" />
-          <Skeleton className="h-4 w-3/4" />
-        </CardHeader>
-        <CardContent className="pl-0 pr-0">
-          <div className="overflow-x-auto">
-            <div className="flex gap-4 p-4 min-w-max">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="w-[280px] flex-shrink-0">
-                  <div className="flex items-center justify-between p-2">
-                    <Skeleton className="h-5 w-20" />
-                    <Skeleton className="h-5 w-8" />
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
+       <div className="lg:col-span-2">
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-1/2" />
+            <Skeleton className="h-4 w-3/4" />
+          </CardHeader>
+          <CardContent className="pl-0 pr-0">
+            <div className="overflow-x-auto">
+              <div className="flex gap-4 p-4 min-w-max">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="w-[280px] flex-shrink-0">
+                    <div className="flex items-center justify-between p-2">
+                      <Skeleton className="h-5 w-20" />
+                      <Skeleton className="h-5 w-8" />
+                    </div>
+                    <div className="space-y-2 p-2 rounded-b-lg bg-muted/50">
+                      <Skeleton className="h-20 w-full" />
+                      <Skeleton className="h-20 w-full" />
+                    </div>
                   </div>
-                  <div className="space-y-2 p-2 rounded-b-lg bg-muted/50">
-                    <Skeleton className="h-20 w-full" />
-                    <Skeleton className="h-20 w-full" />
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
+      <div className="lg:col-span-1">
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-1/3" />
+            <Skeleton className="h-4 w-2/3" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-[300px] w-full" />
+          </CardContent>
+        </Card>
+      </div>
     </div>
-    <Card>
-      <CardHeader>
-        <Skeleton className="h-6 w-1/3" />
-        <Skeleton className="h-4 w-2/3" />
-      </CardHeader>
-      <CardContent>
-        <Skeleton className="h-[300px] w-full" />
-      </CardContent>
-    </Card>
   </div>
 );
