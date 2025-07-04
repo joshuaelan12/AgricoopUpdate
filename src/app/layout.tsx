@@ -76,16 +76,14 @@ function AppLayout({ children }: { children: React.ReactNode }) {
                                 </Link>
                             </SidebarMenuButton>
                         </SidebarMenuItem>
-                         {user && (user.role === 'Admin' || user.role === 'Project Manager') && (
-                          <SidebarMenuItem>
-                            <SidebarMenuButton asChild tooltip="Planning" isActive={isActive('/planning')}>
-                                  <Link href="/planning">
-                                      <GanttChartSquare />
-                                      <span>Planning</span>
-                                  </Link>
-                              </SidebarMenuButton>
-                          </SidebarMenuItem>
-                        )}
+                        <SidebarMenuItem>
+                          <SidebarMenuButton asChild tooltip="Planning" isActive={isActive('/planning')}>
+                                <Link href="/planning">
+                                    <GanttChartSquare />
+                                    <span>Planning</span>
+                                </Link>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
                         <SidebarMenuItem>
                            <SidebarMenuButton asChild tooltip="Checklist Builder" isActive={isActive('/checklist-builder')}>
                                 <Link href="/checklist-builder">

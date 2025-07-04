@@ -469,14 +469,14 @@ export default function PlanningPage() {
 
   useEffect(() => {
     if (authLoading) return;
-    if (!user || (user.role !== 'Admin' && user.role !== 'Project Manager')) {
-        router.push('/');
+    if (!user) {
+        router.push('/login');
         return;
     }
     fetchData();
   }, [user, authLoading, router, fetchData]);
 
-  if (authLoading || loading || !user || (user.role !== 'Admin' && user.role !== 'Project Manager')) {
+  if (authLoading || loading || !user) {
     return <PlanningSkeleton />;
   }
 
@@ -526,7 +526,9 @@ export default function PlanningPage() {
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
                         <ProjectPreviewDialog project={project} users={users} />
-                        <EditPlanningDialog project={project} resources={resources} onActionComplete={fetchData} />
+                        {(user.role === 'Admin' || user.role === 'Project Manager') && (
+                          <EditPlanningDialog project={project} resources={resources} onActionComplete={fetchData} />
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
