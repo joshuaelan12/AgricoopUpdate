@@ -23,8 +23,6 @@ import {
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { 
-  BarChart, 
-  Bar, 
   XAxis, 
   YAxis, 
   CartesianGrid, 
@@ -35,6 +33,7 @@ import {
   Line,
 } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Progress } from '@/components/ui/progress';
 
 // --- DATA INTERFACES ---
 interface DashboardStats {
@@ -53,10 +52,25 @@ interface RecentTask {
   updatedAt: Date;
 }
 
-interface ProjectProgress {
-  name: string;
+type ProjectStatus = "Planning" | "In Progress" | "On Hold" | "Delayed" | "Completed";
+
+const projectStatuses: ProjectStatus[] = ["Planning", "In Progress", "On Hold", "Delayed", "Completed"];
+
+const statusColors: { [key in ProjectStatus]: string } = {
+  "Planning": "bg-gray-500",
+  "In Progress": "bg-blue-500",
+  "On Hold": "bg-yellow-500",
+  "Delayed": "bg-red-500",
+  "Completed": "bg-green-600",
+};
+
+interface Project {
+  id: string;
+  title: string;
+  status: ProjectStatus;
   progress: number;
 }
+
 
 interface ResourceAllocation {
     month: string;
@@ -88,7 +102,7 @@ export default function Dashboard() {
     lowStockItems: [],
   });
   const [recentTasks, setRecentTasks] = useState<RecentTask[]>([]);
-  const [projectProgress, setProjectProgress] = useState<ProjectProgress[]>([]);
+  const [projectsByStatus, setProjectsByStatus] = useState<{ [key: string]: Project[] }>({});
   const [resourceAllocation, setResourceAllocation] = useState<ResourceAllocation[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -97,7 +111,7 @@ export default function Dashboard() {
       setLoading(false);
       setStats({ totalProjects: 0, activeMembers: 0, resourceAlerts: 0, lowStockItems: [] });
       setRecentTasks([]);
-      setProjectProgress([]);
+      setProjectsByStatus({});
       setResourceAllocation([]);
       return;
     }
@@ -116,16 +130,25 @@ export default function Dashboard() {
     
     // --- REAL-TIME LISTENERS ---
     
-    // Projects listener (for stats and progress chart)
+    // Projects listener (for stats and project board)
     const projectsQuery = query(projectsRef, where('companyId', '==', companyId));
     unsubscribes.push(onSnapshot(projectsQuery, (snap) => {
-      setStats(prev => ({ ...prev!, totalProjects: snap.size }));
-      const activeProjects = snap.docs
-        .map(doc => doc.data())
-        .filter(p => ['In Progress', 'On Hold', 'Delayed'].includes(p.status))
-        .slice(0, 5)
-        .map(p => ({ name: p.title, progress: p.progress }));
-      setProjectProgress(activeProjects);
+        setStats(prev => ({ ...prev, totalProjects: snap.size }));
+        const allProjects = snap.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        })) as Project[];
+
+        const groupedByStatus = allProjects.reduce((acc, project) => {
+            const status = project.status;
+            if (!acc[status]) {
+                acc[status] = [];
+            }
+            acc[status].push(project);
+            return acc;
+        }, {} as { [key: string]: Project[] });
+
+        setProjectsByStatus(groupedByStatus);
     }));
     
     // Members listener (for stats)
@@ -281,27 +304,43 @@ export default function Dashboard() {
         </Card>
         <Card className="col-span-3">
           <CardHeader>
-            <CardTitle className="font-headline">Project Progress</CardTitle>
-            <CardDescription>Completion status of active projects.</CardDescription>
+            <CardTitle className="font-headline">Project Board</CardTitle>
+            <CardDescription>Drag to scroll through project statuses.</CardDescription>
           </CardHeader>
-          <CardContent>
-             {projectProgress.length > 0 ? (
-                <ResponsiveContainer width="100%" height={250}>
-                    <BarChart data={projectProgress} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                        <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                        <Tooltip
-                          contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))" }}
-                          labelStyle={{ color: "hsl(var(--foreground))" }}
-                        />
-                        <Legend wrapperStyle={{fontSize: "14px"}}/>
-                        <Bar dataKey="progress" fill="hsl(var(--primary))" name="Progress (%)" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                 <div className="flex justify-center items-center h-[250px] text-muted-foreground">No active projects to display.</div>
-              )}
+          <CardContent className="pl-0 pr-0">
+            <div className="overflow-x-auto">
+              <div className="flex gap-4 p-4 min-w-max">
+                {projectStatuses.map(status => (
+                    <div key={status} className="w-[280px] flex-shrink-0">
+                        <div className="flex items-center justify-between p-2 rounded-t-lg">
+                            <div className="flex items-center gap-2">
+                              <span className={`h-2.5 w-2.5 rounded-full ${statusColors[status]}`} />
+                              <h3 className="font-semibold text-foreground text-sm">{status}</h3>
+                            </div>
+                            <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-md">
+                                {projectsByStatus[status]?.length || 0}
+                            </span>
+                        </div>
+                        <div className="space-y-2 p-2 rounded-b-lg bg-muted/50 h-full min-h-[200px] max-h-[400px] overflow-y-auto">
+                            {(projectsByStatus[status] || []).map(project => (
+                                <Card key={project.id} className="p-3 bg-card hover:bg-card/90 cursor-pointer">
+                                    <p className="font-medium text-sm text-card-foreground">{project.title}</p>
+                                    <div className="flex items-center justify-between mt-2">
+                                        <span className="text-xs text-muted-foreground">{project.progress}% complete</span>
+                                    </div>
+                                     <Progress value={project.progress} className="mt-2 h-1.5" />
+                                </Card>
+                            ))}
+                            {(!projectsByStatus[status] || projectsByStatus[status].length === 0) && (
+                                <div className="text-center text-sm text-muted-foreground pt-10">
+                                    No projects here.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ))}
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -376,11 +415,26 @@ const DashboardSkeleton = () => (
       </Card>
       <Card className="col-span-3">
         <CardHeader>
-          <Skeleton className="h-6 w-1/3" />
-          <Skeleton className="h-4 w-2/3" />
+          <Skeleton className="h-6 w-1/2" />
+          <Skeleton className="h-4 w-3/4" />
         </CardHeader>
-        <CardContent className="flex items-center justify-center">
-          <Skeleton className="h-[250px] w-full" />
+        <CardContent className="pl-0 pr-0">
+          <div className="overflow-x-auto">
+            <div className="flex gap-4 p-4 min-w-max">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="w-[280px] flex-shrink-0">
+                  <div className="flex items-center justify-between p-2">
+                    <Skeleton className="h-5 w-20" />
+                    <Skeleton className="h-5 w-8" />
+                  </div>
+                  <div className="space-y-2 p-2 rounded-b-lg bg-muted/50">
+                    <Skeleton className="h-20 w-full" />
+                    <Skeleton className="h-20 w-full" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>
