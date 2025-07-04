@@ -167,9 +167,9 @@ export async function deleteProjectComment(input: DeleteProjectCommentInput) {
 export async function updateProject(input: UpdateProjectInput) {
     try {
         const validatedInput = UpdateProjectInputSchema.parse(input);
-        const { projectId, ...updateData } = validatedInput;
+        const { id, ...updateData } = validatedInput;
 
-        const projectRef = adminDb.collection('projects').doc(projectId);
+        const projectRef = adminDb.collection('projects').doc(id);
         
         await projectRef.update({
             ...updateData,

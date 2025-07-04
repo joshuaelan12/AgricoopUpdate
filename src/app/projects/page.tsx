@@ -288,7 +288,7 @@ function EditProjectDialog({ project, onActionComplete }: { project: Project, on
   const form = useForm<UpdateProjectInput>({
     resolver: zodResolver(UpdateProjectInputSchema),
     defaultValues: {
-      projectId: project.id,
+      id: project.id,
       title: project.title,
       description: project.description,
     },
