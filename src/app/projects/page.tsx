@@ -2,7 +2,6 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import Image from "next/image";
 import { useAuth } from "@/hooks/use-auth";
 import { db } from "@/lib/firebase";
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -10,9 +9,11 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { formatDistanceToNow } from "date-fns";
 
-import { createProject, updateProjectProgress } from "@/lib/actions/project.actions";
-import { CreateProjectInputSchema } from "@/lib/schemas";
+import { createProject, updateProjectProgress, addProjectComment } from "@/lib/actions/project.actions";
+import { CreateProjectInputSchema, AddProjectCommentInputSchema } from "@/lib/schemas";
+import type { AddProjectCommentInput } from "@/lib/schemas";
 import { useToast } from "@/hooks/use-toast";
 
 import {
@@ -51,11 +52,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider";
+import { Separator } from "@/components/ui/separator";
 
-import { FolderKanban, PlusCircle, Users as UsersIcon, ChevronDown, Loader2 } from "lucide-react";
+import { FolderKanban, PlusCircle, Users as UsersIcon, ChevronDown, Loader2, MessageSquare } from "lucide-react";
 
 
 // --- DATA INTERFACES ---
+interface Comment {
+  id: string;
+  text: string;
+  authorId: string;
+  authorName: string;
+  createdAt: Date;
+}
+
 interface Project {
   id: string;
   title: string;
@@ -63,9 +73,8 @@ interface Project {
   description: string;
   progress: number;
   team: string[]; // Array of user UIDs
-  imageUrl: string;
-  imageHint: string;
   companyId: string;
+  comments: Comment[];
 }
 
 interface UserData {
@@ -95,9 +104,6 @@ const statusColors: { [key: string]: string } = {
 const ProjectCardSkeleton = () => (
   <Card className="flex flex-col">
     <CardHeader>
-      <div className="relative h-40 w-full mb-4">
-        <Skeleton className="h-full w-full rounded-lg" />
-      </div>
       <div className="flex justify-between items-start">
         <Skeleton className="h-6 w-3/4" />
         <Skeleton className="h-6 w-20 rounded-md" />
@@ -267,6 +273,8 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [updatingProgressId, setUpdatingProgressId] = useState<string | null>(null);
   const [liveProgress, setLiveProgress] = useState<{ [projectId: string]: number }>({});
+  const [newComments, setNewComments] = useState<{ [key: string]: string }>({});
+  const [isSubmittingComment, setIsSubmittingComment] = useState<string | null>(null);
 
 
   useEffect(() => {
@@ -290,7 +298,14 @@ export default function ProjectsPage() {
           getDocs(usersQuery),
         ]);
 
-        const projectsData = projectsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Project[];
+        const projectsData = projectsSnap.docs.map(doc => {
+            const data = doc.data();
+            const comments = (data.comments || []).map((comment: any) => ({
+                ...comment,
+                createdAt: comment.createdAt?.toDate(), // Safely convert timestamp
+            })).filter((c: Comment) => c.createdAt); // Filter out any comments that failed to convert
+            return { id: doc.id, ...data, comments };
+        }) as Project[];
         
         const usersData = usersSnap.docs.reduce((acc, doc) => {
           acc[doc.id] = { uid: doc.id, ...(doc.data() as Omit<UserData, 'uid'>) };
@@ -309,6 +324,38 @@ export default function ProjectsPage() {
 
     fetchProjectData();
   }, [user]);
+
+  const handleAddComment = async (e: React.FormEvent, projectId: string) => {
+      e.preventDefault();
+      if (!user || !newComments[projectId]?.trim()) return;
+
+      setIsSubmittingComment(projectId);
+      const commentText = newComments[projectId];
+
+      const input: AddProjectCommentInput = {
+          projectId,
+          commentText,
+          userId: user.uid,
+          userName: user.displayName || 'Anonymous',
+      };
+      
+      const result = await addProjectComment(input);
+
+      if (result.success) {
+          setNewComments(prev => ({...prev, [projectId]: ''}));
+          toast({
+              title: "Comment Added",
+              description: "Your comment has been posted.",
+          });
+      } else {
+          toast({
+              variant: "destructive",
+              title: "Failed to post comment",
+              description: result.error || "An unknown error occurred.",
+          });
+      }
+      setIsSubmittingComment(null);
+  };
   
   return (
     <div>
@@ -355,24 +402,14 @@ export default function ProjectsPage() {
             return (
               <Card key={project.id} className="flex flex-col">
                 <CardHeader>
-                  <div className="relative h-40 w-full mb-4">
-                      <Image
-                        src={project.imageUrl || "https://placehold.co/600x400.png"}
-                        alt={project.title}
-                        layout="fill"
-                        objectFit="cover"
-                        className="rounded-lg"
-                        data-ai-hint={project.imageHint}
-                      />
-                  </div>
                   <div className="flex justify-between items-start">
                       <CardTitle className="font-headline text-2xl">{project.title}</CardTitle>
                       <Badge className={`${statusColors[project.status]} text-primary-foreground`}>{project.status}</Badge>
                   </div>
                   <CardDescription>{project.description}</CardDescription>
                 </CardHeader>
-                <CardContent className="flex-grow">
-                  <div>
+                <CardContent className="flex-grow flex flex-col">
+                  <div className="flex-grow">
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-sm font-medium text-muted-foreground">Progress</span>
                       {isUpdating && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -413,6 +450,63 @@ export default function ProjectsPage() {
                       <Progress value={project.progress} className="mt-1 h-2" />
                     )}
                     <span className="text-xs text-muted-foreground">{displayProgress}% complete</span>
+                  </div>
+
+                  <Separator className="my-4" />
+
+                  <div>
+                    <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4" />
+                      Comments
+                    </h4>
+                    <div className="space-y-4 max-h-48 overflow-y-auto pr-2 mb-4">
+                      {project.comments?.length > 0 ? (
+                        project.comments
+                          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+                          .map((comment) => (
+                            <div key={comment.id} className="flex items-start gap-3">
+                              <Avatar className="h-8 w-8 border">
+                                <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
+                              </Avatar>
+                              <div className="w-full bg-muted/50 p-2 rounded-md">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-sm font-medium">{comment.authorName}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {formatDistanceToNow(comment.createdAt, { addSuffix: true })}
+                                  </p>
+                                </div>
+                                <p className="text-sm text-foreground/80">{comment.text}</p>
+                              </div>
+                            </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-muted-foreground text-center py-4">No comments yet.</p>
+                      )}
+                    </div>
+
+                    {canUpdate && (
+                      <form onSubmit={(e) => handleAddComment(e, project.id)} className="flex items-start gap-2">
+                        <Avatar className="h-9 w-9 border">
+                          <AvatarFallback>{getInitials(user?.displayName)}</AvatarFallback>
+                        </Avatar>
+                        <div className="w-full">
+                          <Textarea
+                            placeholder="Add a comment..."
+                            value={newComments[project.id] || ''}
+                            onChange={(e) => setNewComments(prev => ({ ...prev, [project.id]: e.target.value }))}
+                            className="min-h-[40px] bg-background"
+                          />
+                          <Button 
+                            type="submit" 
+                            size="sm" 
+                            className="mt-2" 
+                            disabled={isSubmittingComment === project.id || !newComments[project.id]?.trim()}
+                          >
+                            {isSubmittingComment === project.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Post"}
+                          </Button>
+                        </div>
+                      </form>
+                    )}
                   </div>
                 </CardContent>
                 <CardFooter>

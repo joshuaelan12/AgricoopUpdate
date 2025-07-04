@@ -1,9 +1,10 @@
+
 'use server';
 
 import { z } from 'zod';
 import { adminDb, FieldValue } from '@/lib/firebase-admin';
 import { revalidatePath } from 'next/cache';
-import { CreateProjectInputSchema, UpdateProjectProgressInputSchema, type CreateProjectInput, type UpdateProjectProgressInput } from '@/lib/schemas';
+import { CreateProjectInputSchema, UpdateProjectProgressInputSchema, AddProjectCommentInputSchema, type CreateProjectInput, type UpdateProjectProgressInput, type AddProjectCommentInput } from '@/lib/schemas';
 
 // --- SERVER ACTION ---
 export async function createProject(input: CreateProjectInput) {
@@ -15,10 +16,9 @@ export async function createProject(input: CreateProjectInput) {
         await newProjectRef.set({
             ...validatedInput,
             progress: 0,
+            comments: [],
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
-            imageUrl: "https://placehold.co/600x400.png",
-            imageHint: "project abstract"
         });
         
         revalidatePath('/projects'); // Invalidate cache for the projects page
@@ -58,6 +58,39 @@ export async function updateProjectProgress(input: UpdateProjectProgressInput) {
 
     } catch (error: any) {
         console.error("Error updating project progress:", error);
+        if (error instanceof z.ZodError) {
+            return { success: false, error: "Validation failed.", issues: error.flatten() };
+        }
+        return { success: false, error: error.message || "An unknown error occurred." };
+    }
+}
+
+
+export async function addProjectComment(input: AddProjectCommentInput) {
+    try {
+        const validatedInput = AddProjectCommentInputSchema.parse(input);
+        const { projectId, commentText, userId, userName } = validatedInput;
+
+        const projectRef = adminDb.collection('projects').doc(projectId);
+
+        const newComment = {
+            id: adminDb.collection('projects').doc().id, // Generate a unique ID for the comment
+            text: commentText,
+            authorId: userId,
+            authorName: userName,
+            createdAt: FieldValue.serverTimestamp(),
+        };
+
+        await projectRef.update({
+            comments: FieldValue.arrayUnion(newComment)
+        });
+
+        revalidatePath('/projects');
+
+        return { success: true };
+        
+    } catch (error: any) {
+        console.error("Error adding comment:", error);
         if (error instanceof z.ZodError) {
             return { success: false, error: "Validation failed.", issues: error.flatten() };
         }

@@ -1,3 +1,4 @@
+
 import { z } from 'zod';
 
 // --- User Schemas ---
@@ -39,6 +40,14 @@ export const UpdateProjectProgressInputSchema = z.object({
   progress: z.number().min(0).max(100),
 });
 export type UpdateProjectProgressInput = z.infer<typeof UpdateProjectProgressInputSchema>;
+
+export const AddProjectCommentInputSchema = z.object({
+  projectId: z.string(),
+  commentText: z.string().min(1, "Comment cannot be empty."),
+  userId: z.string(),
+  userName: z.string(),
+});
+export type AddProjectCommentInput = z.infer<typeof AddProjectCommentInputSchema>;
 
 
 // --- Resource Schemas ---
