@@ -78,7 +78,7 @@ export async function addProjectComment(input: AddProjectCommentInput) {
             text: commentText,
             authorId: userId,
             authorName: userName,
-            createdAt: FieldValue.serverTimestamp(),
+            createdAt: new Date(),
         };
 
         await projectRef.update({
