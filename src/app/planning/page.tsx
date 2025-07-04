@@ -9,9 +9,9 @@ import { format } from "date-fns";
 // Actions, Schemas, Hooks
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from "@/hooks/use-toast";
-import { updateProjectPlanning } from '@/lib/actions/project.actions';
-import { UpdateProjectPlanningInputSchema } from '@/lib/schemas';
-import type { UpdateProjectPlanningInput } from '@/lib/schemas';
+import { updateProjectPlanning, allocateResourceToProject, deallocateResourceFromProject } from '@/lib/actions/project.actions';
+import { UpdateProjectPlanningInputSchema, AllocateResourceInputSchema, DeallocateResourceInputSchema } from '@/lib/schemas';
+import type { UpdateProjectPlanningInput, AllocatedResource } from '@/lib/schemas';
 
 // Firebase
 import { db } from '@/lib/firebase';
@@ -30,22 +30,37 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
 // Icons
-import { GanttChartSquare, Loader2, Edit, CalendarIcon as CalendarIconLucide, Leaf } from "lucide-react";
+import { GanttChartSquare, Loader2, Edit, CalendarIcon as CalendarIconLucide, Eye, Package, Trash2, Plus, Users, DollarSign, Target, CheckCircle, Info } from "lucide-react";
 
 
-// --- DATA INTERFACE ---
+// --- DATA INTERFACES ---
+interface Resource {
+  id: string;
+  name: string;
+  quantity: number;
+}
+
+interface UserData {
+  uid: string;
+  displayName: string;
+}
+
 interface PlanningProject {
   id: string;
   title: string;
+  description: string;
   status: string;
+  team: string[];
   priority?: 'Low' | 'Medium' | 'High';
   deadline?: Date | null;
   estimatedBudget?: number;
   objectives?: string;
   expectedOutcomes?: string;
+  allocatedResources: AllocatedResource[];
 }
 
 
@@ -64,11 +79,90 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 0,
 });
 
+// --- PROJECT PREVIEW DIALOG ---
+function ProjectPreviewDialog({ project, users }: { project: PlanningProject, users: { [uid: string]: UserData } }) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon">
+          <Eye className="h-4 w-4" />
+          <span className="sr-only">Preview Project</span>
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[650px]">
+        <DialogHeader>
+          <DialogTitle className="font-headline text-2xl flex items-center gap-2"><Info />{project.title}</DialogTitle>
+          <DialogDescription>{project.description}</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <h4 className="text-sm font-medium text-muted-foreground">Status</h4>
+              <p>{project.status}</p>
+            </div>
+             <div className="space-y-1">
+              <h4 className="text-sm font-medium text-muted-foreground">Priority</h4>
+              <p>{project.priority}</p>
+            </div>
+            <div className="space-y-1">
+              <h4 className="text-sm font-medium text-muted-foreground">Deadline</h4>
+              <p>{project.deadline ? format(project.deadline, 'PPP') : 'Not set'}</p>
+            </div>
+            <div className="space-y-1">
+              <h4 className="text-sm font-medium text-muted-foreground">Budget</h4>
+              <p>{project.estimatedBudget ? currencyFormatter.format(project.estimatedBudget) : 'Not set'}</p>
+            </div>
+          </div>
+          <Separator />
+           <div className="space-y-2">
+              <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2"><Target />Objectives</h4>
+              <p className="text-sm">{project.objectives || 'Not defined.'}</p>
+            </div>
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2"><CheckCircle />Expected Outcomes</h4>
+              <p className="text-sm">{project.expectedOutcomes || 'Not defined.'}</p>
+            </div>
+          <Separator />
+           <div className="space-y-2">
+              <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2"><Users />Team Members</h4>
+              <div className="flex flex-wrap gap-2">
+                {project.team.map(uid => (
+                   <Badge key={uid} variant="secondary">{users[uid]?.displayName || 'Unknown User'}</Badge>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2"><Package />Allocated Resources</h4>
+               {project.allocatedResources.length > 0 ? (
+                    <ul className="list-disc pl-5 text-sm space-y-1">
+                      {project.allocatedResources.map(r => (
+                        <li key={r.resourceId}>{r.name}: {r.quantity} kg</li>
+                      ))}
+                    </ul>
+                ) : (
+                    <p className="text-sm text-muted-foreground">No resources allocated.</p>
+                )}
+            </div>
+        </div>
+        <DialogFooter>
+          <DialogClose asChild><Button>Close</Button></DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 
 // --- EDIT PLANNING DIALOG ---
-function EditPlanningDialog({ project, onActionComplete }: { project: PlanningProject, onActionComplete: () => void }) {
+function EditPlanningDialog({ project, resources, onActionComplete }: { project: PlanningProject, resources: Resource[], onActionComplete: () => void }) {
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
+  
+  // Resource allocation state
+  const [resourceToAllocate, setResourceToAllocate] = useState('');
+  const [quantityToAllocate, setQuantityToAllocate] = useState<number | string>('');
+  const [isAllocating, setIsAllocating] = useState(false);
+  const [isDeallocating, setIsDeallocating] = useState<string | null>(null);
 
   const form = useForm<UpdateProjectPlanningInput>({
     resolver: zodResolver(UpdateProjectPlanningInputSchema),
@@ -81,6 +175,41 @@ function EditPlanningDialog({ project, onActionComplete }: { project: PlanningPr
       estimatedBudget: project.estimatedBudget || 0,
     },
   });
+
+  const handleAllocateResource = async () => {
+    if (!resourceToAllocate || !quantityToAllocate) {
+      toast({ variant: 'destructive', title: 'Please select a resource and enter a quantity.' });
+      return;
+    }
+    setIsAllocating(true);
+    const result = await allocateResourceToProject({
+      projectId: project.id,
+      resourceId: resourceToAllocate,
+      quantity: Number(quantityToAllocate),
+    });
+
+    if (result.success) {
+      toast({ title: 'Resource Allocated' });
+      setResourceToAllocate('');
+      setQuantityToAllocate('');
+      onActionComplete(); // This will refetch data for the entire page
+    } else {
+      toast({ variant: 'destructive', title: 'Allocation Failed', description: result.error });
+    }
+    setIsAllocating(false);
+  };
+
+  const handleDeallocateResource = async (resourceId: string) => {
+    setIsDeallocating(resourceId);
+    const result = await deallocateResourceFromProject({ projectId: project.id, resourceId });
+    if (result.success) {
+      toast({ title: 'Resource Deallocated' });
+      onActionComplete();
+    } else {
+      toast({ variant: 'destructive', title: 'Deallocation Failed', description: result.error });
+    }
+    setIsDeallocating(null);
+  };
 
   const onSubmit = async (values: UpdateProjectPlanningInput) => {
     const result = await updateProjectPlanning(values);
@@ -107,13 +236,14 @@ function EditPlanningDialog({ project, onActionComplete }: { project: PlanningPr
             <Edit className="mr-2 h-4 w-4" /> Edit
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[700px]">
         <DialogHeader>
           <DialogTitle className="font-headline text-2xl">Plan Project: {project.title}</DialogTitle>
           <DialogDescription>
-            Set objectives, deadlines, and budgets for this project.
+            Set objectives, deadlines, budgets, and allocate resources for this project.
           </DialogDescription>
         </DialogHeader>
+        <div className="max-h-[70vh] overflow-y-auto pr-4">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             
@@ -192,8 +322,7 @@ function EditPlanningDialog({ project, onActionComplete }: { project: PlanningPr
               )}/>
             </div>
 
-            <DialogFooter>
-               <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
+            <DialogFooter className="sticky bottom-0 bg-background py-4">
               <Button type="submit" disabled={form.formState.isSubmitting}>
                  {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Save Plan
@@ -201,6 +330,66 @@ function EditPlanningDialog({ project, onActionComplete }: { project: PlanningPr
             </DialogFooter>
           </form>
         </Form>
+        
+        <Separator className="my-6" />
+
+        {/* --- Resource Allocation Section --- */}
+        <div className="space-y-4">
+            <h3 className="text-lg font-medium font-headline">Resource Allocation</h3>
+            
+            {/* Allocated Resources List */}
+            <div>
+              <FormLabel>Currently Allocated</FormLabel>
+              <div className="mt-2 space-y-2">
+                {project.allocatedResources.length > 0 ? (
+                  project.allocatedResources.map(res => (
+                    <div key={res.resourceId} className="flex items-center justify-between bg-muted/50 p-2 rounded-md">
+                      <div>
+                        <p className="font-medium">{res.name}</p>
+                        <p className="text-sm text-muted-foreground">{res.quantity} kg</p>
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => handleDeallocateResource(res.resourceId)} disabled={isDeallocating === res.resourceId}>
+                        {isDeallocating === res.resourceId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-destructive" />}
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-2">No resources allocated yet.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Allocate New Resource Form */}
+            <div>
+                <FormLabel>Allocate New Resource</FormLabel>
+                <div className="mt-2 flex items-end gap-2">
+                    <div className="flex-grow">
+                        <Select value={resourceToAllocate} onValueChange={setResourceToAllocate}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select a resource..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {resources.map(r => (
+                                    <SelectItem key={r.id} value={r.id}>
+                                        {r.name} ({r.quantity} kg available)
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="w-28">
+                         <Input type="number" placeholder="kg" value={quantityToAllocate} onChange={e => setQuantityToAllocate(e.target.value)} />
+                    </div>
+                    <Button onClick={handleAllocateResource} disabled={isAllocating}>
+                        {isAllocating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    </Button>
+                </div>
+            </div>
+        </div>
+        </div>
+        <DialogFooter className="mt-4">
+            <DialogClose asChild><Button type="button" variant="outline">Close</Button></DialogClose>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -212,9 +401,11 @@ export default function PlanningPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [projects, setProjects] = useState<PlanningProject[]>([]);
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [users, setUsers] = useState<{ [uid: string]: UserData }>({});
   const [loading, setLoading] = useState(true);
 
-  const fetchProjects = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     if (!user?.companyId) {
       setLoading(false);
       return;
@@ -222,28 +413,55 @@ export default function PlanningPage() {
     setLoading(true);
 
     try {
-      const projectsRef = collection(db, 'projects');
-      const q = query(projectsRef, where('companyId', '==', user.companyId));
-      const querySnapshot = await getDocs(q);
+      const { companyId } = user;
       
-      const projectsData = querySnapshot.docs.map(doc => {
+      const projectsRef = collection(db, 'projects');
+      const resourcesRef = collection(db, 'resources');
+      const usersRef = collection(db, 'users');
+
+      const pQuery = query(projectsRef, where('companyId', '==', companyId));
+      const rQuery = query(resourcesRef, where('companyId', '==', companyId));
+      const uQuery = query(usersRef, where('companyId', '==', companyId));
+
+      const [projectsSnap, resourcesSnap, usersSnap] = await Promise.all([
+        getDocs(pQuery),
+        getDocs(rQuery),
+        getDocs(uQuery),
+      ]);
+      
+      const projectsData = projectsSnap.docs.map(doc => {
           const data = doc.data();
           return {
               id: doc.id,
               title: data.title,
+              description: data.description,
               status: data.status,
+              team: data.team,
               priority: data.priority,
               deadline: data.deadline?.toDate(),
               estimatedBudget: data.estimatedBudget,
               objectives: data.objectives,
               expectedOutcomes: data.expectedOutcomes,
+              allocatedResources: data.allocatedResources || [],
           }
       }) as PlanningProject[];
       
+      const resourcesData = resourcesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Resource[];
+      const usersData = usersSnap.docs.reduce((acc, doc) => {
+          acc[doc.id] = { uid: doc.id, ...(doc.data() as Omit<UserData, 'uid'>) };
+          return acc;
+        }, {} as { [uid: string]: UserData });
+
+
       setProjects(projectsData);
+      setResources(resourcesData);
+      setUsers(usersData);
+
     } catch (error) {
-      console.error("Error fetching projects:", error);
+      console.error("Error fetching data:", error);
       setProjects([]);
+      setResources([]);
+      setUsers({});
     } finally {
       setLoading(false);
     }
@@ -255,8 +473,8 @@ export default function PlanningPage() {
         router.push('/');
         return;
     }
-    fetchProjects();
-  }, [user, authLoading, router, fetchProjects]);
+    fetchData();
+  }, [user, authLoading, router, fetchData]);
 
   if (authLoading || loading || !user || (user.role !== 'Admin' && user.role !== 'Project Manager')) {
     return <PlanningSkeleton />;
@@ -306,7 +524,10 @@ export default function PlanningPage() {
                     <TableCell>{project.deadline ? format(project.deadline, 'PP') : <span className="text-muted-foreground">-</span>}</TableCell>
                     <TableCell>{project.estimatedBudget ? currencyFormatter.format(project.estimatedBudget) : <span className="text-muted-foreground">-</span>}</TableCell>
                     <TableCell className="text-right">
-                      <EditPlanningDialog project={project} onActionComplete={fetchProjects} />
+                      <div className="flex items-center justify-end gap-2">
+                        <ProjectPreviewDialog project={project} users={users} />
+                        <EditPlanningDialog project={project} resources={resources} onActionComplete={fetchData} />
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -343,11 +564,15 @@ const PlanningSkeleton = () => (
           <div className="space-y-4">
             {[...Array(4)].map((_, i) => (
               <div key={i} className="grid grid-cols-5 gap-4 items-center p-2">
-                <Skeleton className="h-4 w-full" />
+                <div className="space-y-2">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-3 w-3/4" />
+                </div>
                 <Skeleton className="h-6 w-20 rounded-full" />
                 <Skeleton className="h-4 w-full" />
                 <Skeleton className="h-4 w-full" />
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-2">
+                    <Skeleton className="h-8 w-8 rounded-full" />
                     <Skeleton className="h-8 w-20" />
                 </div>
               </div>

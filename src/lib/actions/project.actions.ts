@@ -4,7 +4,28 @@
 import { z } from 'zod';
 import { adminDb, FieldValue } from '@/lib/firebase-admin';
 import { revalidatePath } from 'next/cache';
-import { CreateProjectInputSchema, UpdateProjectProgressInputSchema, AddProjectCommentInputSchema, DeleteProjectCommentInputSchema, type CreateProjectInput, type UpdateProjectProgressInput, type AddProjectCommentInput, type DeleteProjectCommentInput, UpdateProjectInputSchema, DeleteProjectInputSchema, type UpdateProjectInput, type DeleteProjectInput, UpdateProjectStatusInputSchema, type UpdateProjectStatusInput, UpdateProjectPlanningInputSchema, type UpdateProjectPlanningInput } from '@/lib/schemas';
+import { 
+    CreateProjectInputSchema, 
+    UpdateProjectProgressInputSchema, 
+    AddProjectCommentInputSchema, 
+    DeleteProjectCommentInputSchema, 
+    type CreateProjectInput, 
+    type UpdateProjectProgressInput, 
+    type AddProjectCommentInput, 
+    type DeleteProjectCommentInput, 
+    UpdateProjectInputSchema, 
+    DeleteProjectInputSchema, 
+    type UpdateProjectInput, 
+    type DeleteProjectInput, 
+    UpdateProjectStatusInputSchema, 
+    type UpdateProjectStatusInput, 
+    UpdateProjectPlanningInputSchema, 
+    type UpdateProjectPlanningInput,
+    AllocateResourceInputSchema,
+    DeallocateResourceInputSchema,
+    type AllocateResourceInput,
+    type DeallocateResourceInput
+} from '@/lib/schemas';
 
 // --- SERVER ACTION ---
 export async function createProject(input: CreateProjectInput) {
@@ -22,6 +43,7 @@ export async function createProject(input: CreateProjectInput) {
             priority: 'Medium',
             deadline: null,
             estimatedBudget: 0,
+            allocatedResources: [],
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
         });
@@ -46,11 +68,6 @@ export async function updateProjectProgress(input: UpdateProjectProgressInput) {
 
         const projectRef = adminDb.collection('projects').doc(projectId);
         
-        // Security note: In a real-world scenario, you'd want to verify
-        // that the user making this request has permission to update this project.
-        // This would typically involve verifying a session token from the client.
-        // For this app, permission is enforced on the client-side UI.
-
         await projectRef.update({
             progress: progress,
             updatedAt: FieldValue.serverTimestamp(),
@@ -79,7 +96,7 @@ export async function addProjectComment(input: AddProjectCommentInput) {
         const projectRef = adminDb.collection('projects').doc(projectId);
 
         const newComment = {
-            id: adminDb.collection('projects').doc().id, // Generate a unique ID for the comment
+            id: adminDb.collection('projects').doc().id,
             text: commentText,
             authorId: userId,
             authorName: userName,
@@ -246,6 +263,93 @@ export async function updateProjectPlanning(input: UpdateProjectPlanningInput) {
         if (error instanceof z.ZodError) {
             return { success: false, error: "Validation failed.", issues: error.flatten() };
         }
+        return { success: false, error: error.message || "An unknown error occurred." };
+    }
+}
+
+
+export async function allocateResourceToProject(input: AllocateResourceInput) {
+    try {
+        const { projectId, resourceId, quantity } = AllocateResourceInputSchema.parse(input);
+        const projectRef = adminDb.collection('projects').doc(projectId);
+        const resourceRef = adminDb.collection('resources').doc(resourceId);
+
+        await adminDb.runTransaction(async (transaction) => {
+            const resourceDoc = await transaction.get(resourceRef);
+            const projectDoc = await transaction.get(projectRef);
+
+            if (!resourceDoc.exists) throw new Error("Resource not found.");
+            if (!projectDoc.exists) throw new Error("Project not found.");
+
+            const resourceData = resourceDoc.data()!;
+            const projectData = projectDoc.data()!;
+            
+            if (resourceData.quantity < quantity) {
+                throw new Error(`Not enough stock for ${resourceData.name}. Available: ${resourceData.quantity} kg.`);
+            }
+
+            const existingAllocations = projectData.allocatedResources || [];
+            if (existingAllocations.some((r: any) => r.resourceId === resourceId)) {
+                throw new Error(`${resourceData.name} is already allocated to this project. Please remove it first to adjust the quantity.`);
+            }
+
+            transaction.update(resourceRef, {
+                quantity: FieldValue.increment(-quantity)
+            });
+
+            transaction.update(projectRef, {
+                allocatedResources: FieldValue.arrayUnion({
+                    resourceId,
+                    name: resourceData.name,
+                    quantity
+                })
+            });
+        });
+
+        revalidatePath('/planning');
+        revalidatePath('/resources');
+
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error allocating resource:", error);
+        return { success: false, error: error.message || "An unknown error occurred." };
+    }
+}
+
+
+export async function deallocateResourceFromProject(input: DeallocateResourceInput) {
+    try {
+        const { projectId, resourceId } = DeallocateResourceInputSchema.parse(input);
+        const projectRef = adminDb.collection('projects').doc(projectId);
+        const resourceRef = adminDb.collection('resources').doc(resourceId);
+
+        await adminDb.runTransaction(async (transaction) => {
+            const projectDoc = await transaction.get(projectRef);
+            if (!projectDoc.exists) throw new Error("Project not found.");
+            
+            const projectData = projectDoc.data()!;
+            const allocatedResources = projectData.allocatedResources || [];
+            const resourceToDeallocate = allocatedResources.find((r: any) => r.resourceId === resourceId);
+
+            if (!resourceToDeallocate) {
+                throw new Error("Resource was not found in this project's allocations.");
+            }
+
+            transaction.update(resourceRef, {
+                quantity: FieldValue.increment(resourceToDeallocate.quantity)
+            });
+
+            transaction.update(projectRef, {
+                allocatedResources: FieldValue.arrayRemove(resourceToDeallocate)
+            });
+        });
+
+        revalidatePath('/planning');
+        revalidatePath('/resources');
+        
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error deallocating resource:", error);
         return { success: false, error: error.message || "An unknown error occurred." };
     }
 }

@@ -136,3 +136,25 @@ export const SuggestChecklistOutputSchema = z.object({
     .describe('A list of suggested action items for the checklist.'),
 });
 export type SuggestChecklistOutput = z.infer<typeof SuggestChecklistOutputSchema>;
+
+
+// --- Resource Allocation Schemas ---
+export const AllocatedResourceSchema = z.object({
+  resourceId: z.string(),
+  name: z.string(),
+  quantity: z.number(),
+});
+export type AllocatedResource = z.infer<typeof AllocatedResourceSchema>;
+
+export const AllocateResourceInputSchema = z.object({
+  projectId: z.string(),
+  resourceId: z.string(),
+  quantity: z.coerce.number().positive("Quantity must be a positive number."),
+});
+export type AllocateResourceInput = z.infer<typeof AllocateResourceInputSchema>;
+
+export const DeallocateResourceInputSchema = z.object({
+  projectId: z.string(),
+  resourceId: z.string(),
+});
+export type DeallocateResourceInput = z.infer<typeof DeallocateResourceInputSchema>;
