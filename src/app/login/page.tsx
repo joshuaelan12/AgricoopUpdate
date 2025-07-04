@@ -12,20 +12,13 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Leaf } from "lucide-react";
+import { Leaf, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { auth, db } from "@/lib/firebase";
-import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
-import { collection, doc, getDoc } from "firebase/firestore";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { AuthUser } from "@/hooks/use-auth";
-
-const roles: AuthUser['role'][] = ['Admin', 'Project Manager', 'Member', 'Accountant'];
 
 export default function LoginPage() {
-  const [companyName, setCompanyName] = useState("");
-  const [role, setRole] = useState<AuthUser['role'] | "">("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -36,7 +29,7 @@ export default function LoginPage() {
     e.preventDefault();
     setIsLoading(true);
 
-    if (!companyName || !role || !email || !password) {
+    if (!email || !password) {
         toast({
             variant: "destructive",
             title: "Login Failed",
@@ -47,80 +40,19 @@ export default function LoginPage() {
     }
 
     try {
-      // 1. Authenticate with email/password
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-
-      // 2. Get user document from Firestore
-      const userDocRef = doc(db, "users", user.uid);
-      const userDocSnap = await getDoc(userDocRef);
-
-      if (!userDocSnap.exists()) {
-          await signOut(auth);
-          toast({
-              variant: "destructive",
-              title: "Login Failed",
-              description: "User profile not found. Please contact your admin.",
-          });
-          setIsLoading(false);
-          return;
-      }
+      await signInWithEmailAndPassword(auth, email, password);
+      // The AuthAndRoutingController in layout.tsx will handle redirection
+      // based on the user's role after the auth state changes.
+      // We just need to push to a generic authenticated route.
+      router.push("/"); 
       
-      const userData = userDocSnap.data();
-
-      // 3. Get company document from Firestore
-      const companyDocRef = doc(db, "companies", userData.companyId);
-      const companyDocSnap = await getDoc(companyDocRef);
-
-      if (!companyDocSnap.exists()) {
-          await signOut(auth);
-          toast({
-              variant: "destructive",
-              title: "Login Failed",
-              description: "Company data associated with this user could not be found.",
-          });
-          setIsLoading(false);
-          return;
-      }
-
-      const companyData = companyDocSnap.data();
-
-      // 4. Verify company name (case-insensitive) and role
-      const isCompanyMatch = companyData.name.trim().toLowerCase() === companyName.trim().toLowerCase();
-      const isRoleMatch = userData.role === role;
-
-      if (isCompanyMatch && isRoleMatch) {
-          // Success! Redirect based on role.
-          if (role === 'Admin') {
-            router.push("/admin-dashboard");
-          } else {
-            router.push("/");
-          }
-      } else {
-          // Mismatch
-          await signOut(auth);
-           let description = "Invalid company or role for this account.";
-           if (!isCompanyMatch) {
-               description = "The company name entered does not match the one on record for this user. Please check for typos and try again."
-           } else if (!isRoleMatch) {
-               description = `The role selected is incorrect. Your account has a different role assigned.`
-           }
-          toast({
-              variant: "destructive",
-              title: "Login Failed",
-              description: description,
-          });
-      }
-
     } catch (error: any) {
-      // On any failure, ensure the user is signed out before showing an error.
-      if (auth.currentUser) {
-        await signOut(auth);
-      }
       toast({
         variant: "destructive",
         title: "Login Failed",
-        description: error.code === 'auth/invalid-credential' ? 'Invalid email or password.' : 'An unexpected error occurred. Please try again.',
+        description: error.code === 'auth/invalid-credential' 
+            ? 'Invalid email or password.' 
+            : 'An unexpected error occurred. Please try again.',
       });
     } finally {
         setIsLoading(false);
@@ -141,30 +73,6 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="grid gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="company-name">Company Name</Label>
-              <Input
-                id="company-name"
-                type="text"
-                placeholder="Your Company Inc."
-                required
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-              />
-            </div>
-             <div className="grid gap-2">
-                <Label htmlFor="role">Role</Label>
-                <Select onValueChange={(value) => setRole(value as AuthUser['role'])} value={role}>
-                    <SelectTrigger id="role">
-                        <SelectValue placeholder="Select your role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {roles.map(r => (
-                            <SelectItem key={r} value={r}>{r}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            </div>
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -189,7 +97,7 @@ export default function LoginPage() {
               <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Logging in...' : 'Login'}
+              {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Logging in...</> : 'Login'}
             </Button>
           </form>
           <div className="mt-4 text-center text-sm text-muted-foreground">
