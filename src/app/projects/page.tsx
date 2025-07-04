@@ -9,9 +9,8 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { formatDistanceToNow } from "date-fns";
 
-import { createProject, updateProjectProgress, addProjectComment } from "@/lib/actions/project.actions";
+import { createProject, updateProjectProgress, addProjectComment, deleteProjectComment } from "@/lib/actions/project.actions";
 import { CreateProjectInputSchema, AddProjectCommentInputSchema } from "@/lib/schemas";
 import type { AddProjectCommentInput } from "@/lib/schemas";
 import { useToast } from "@/hooks/use-toast";
@@ -40,6 +39,17 @@ import {
   DialogClose
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   Form,
   FormControl,
   FormField,
@@ -54,7 +64,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuChe
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 
-import { FolderKanban, PlusCircle, Users as UsersIcon, ChevronDown, Loader2, MessageSquare } from "lucide-react";
+import { FolderKanban, PlusCircle, Users as UsersIcon, ChevronDown, Loader2, MessageSquare, Trash2 } from "lucide-react";
 
 
 // --- DATA INTERFACES ---
@@ -276,6 +286,7 @@ export default function ProjectsPage() {
   const [liveProgress, setLiveProgress] = useState<{ [projectId: string]: number }>({});
   const [newComments, setNewComments] = useState<{ [key: string]: string }>({});
   const [isSubmittingComment, setIsSubmittingComment] = useState<string | null>(null);
+  const [isDeletingComment, setIsDeletingComment] = useState<string | null>(null);
 
 
   useEffect(() => {
@@ -357,6 +368,31 @@ export default function ProjectsPage() {
           });
       }
       setIsSubmittingComment(null);
+  };
+
+  const handleDeleteComment = async (projectId: string, commentId: string) => {
+    if (!user) return;
+
+    setIsDeletingComment(commentId);
+    const result = await deleteProjectComment({
+      projectId,
+      commentId,
+      userId: user.uid,
+    });
+
+    if (result.success) {
+      toast({
+        title: "Comment Deleted",
+      });
+      router.refresh();
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Failed to delete comment",
+        description: result.error || "An unknown error occurred.",
+      });
+    }
+    setIsDeletingComment(null);
   };
   
   return (
@@ -473,9 +509,33 @@ export default function ProjectsPage() {
                               <div className="w-full bg-muted/50 p-2 rounded-md">
                                 <div className="flex items-center justify-between">
                                   <p className="text-sm font-medium">{comment.authorName}</p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {formatDistanceToNow(comment.createdAt, { addSuffix: true })}
-                                  </p>
+                                   {user?.uid === comment.authorId && (
+                                    <AlertDialog>
+                                      <AlertDialogTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6">
+                                          <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                                        </Button>
+                                      </AlertDialogTrigger>
+                                      <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                          <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                          <AlertDialogDescription>
+                                            This will permanently delete this comment. This action cannot be undone.
+                                          </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                          <AlertDialogAction
+                                            onClick={() => handleDeleteComment(project.id, comment.id)}
+                                            disabled={isDeletingComment === comment.id}
+                                          >
+                                            {isDeletingComment === comment.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                            Delete
+                                          </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                      </AlertDialogContent>
+                                    </AlertDialog>
+                                  )}
                                 </div>
                                 <p className="text-sm text-foreground/80">{comment.text}</p>
                               </div>

@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import { adminDb, FieldValue } from '@/lib/firebase-admin';
 import { revalidatePath } from 'next/cache';
-import { CreateProjectInputSchema, UpdateProjectProgressInputSchema, AddProjectCommentInputSchema, type CreateProjectInput, type UpdateProjectProgressInput, type AddProjectCommentInput } from '@/lib/schemas';
+import { CreateProjectInputSchema, UpdateProjectProgressInputSchema, AddProjectCommentInputSchema, DeleteProjectCommentInputSchema, type CreateProjectInput, type UpdateProjectProgressInput, type AddProjectCommentInput, type DeleteProjectCommentInput } from '@/lib/schemas';
 
 // --- SERVER ACTION ---
 export async function createProject(input: CreateProjectInput) {
@@ -91,6 +91,50 @@ export async function addProjectComment(input: AddProjectCommentInput) {
         
     } catch (error: any) {
         console.error("Error adding comment:", error);
+        if (error instanceof z.ZodError) {
+            return { success: false, error: "Validation failed.", issues: error.flatten() };
+        }
+        return { success: false, error: error.message || "An unknown error occurred." };
+    }
+}
+
+
+export async function deleteProjectComment(input: DeleteProjectCommentInput) {
+    try {
+        const { projectId, commentId, userId } = DeleteProjectCommentInputSchema.parse(input);
+
+        const projectRef = adminDb.collection('projects').doc(projectId);
+        const projectSnap = await projectRef.get();
+
+        if (!projectSnap.exists) {
+            return { success: false, error: "Project not found." };
+        }
+
+        const projectData = projectSnap.data();
+        if (!projectData || !Array.isArray(projectData.comments)) {
+            return { success: false, error: "Comments not found on this project." };
+        }
+        
+        const commentToDelete = projectData.comments.find(c => c.id === commentId);
+
+        if (!commentToDelete) {
+            return { success: false, error: "Comment not found." };
+        }
+
+        if (commentToDelete.authorId !== userId) {
+            return { success: false, error: "You do not have permission to delete this comment." };
+        }
+
+        await projectRef.update({
+            comments: FieldValue.arrayRemove(commentToDelete),
+        });
+
+        revalidatePath('/projects');
+
+        return { success: true };
+
+    } catch (error: any) {
+        console.error("Error deleting comment:", error);
         if (error instanceof z.ZodError) {
             return { success: false, error: "Validation failed.", issues: error.flatten() };
         }

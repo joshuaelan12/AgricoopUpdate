@@ -49,6 +49,13 @@ export const AddProjectCommentInputSchema = z.object({
 });
 export type AddProjectCommentInput = z.infer<typeof AddProjectCommentInputSchema>;
 
+export const DeleteProjectCommentInputSchema = z.object({
+  projectId: z.string(),
+  commentId: z.string(),
+  userId: z.string(),
+});
+export type DeleteProjectCommentInput = z.infer<typeof DeleteProjectCommentInputSchema>;
+
 
 // --- Resource Schemas ---
 
