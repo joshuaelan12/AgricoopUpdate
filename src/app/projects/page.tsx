@@ -268,6 +268,7 @@ function CreateProjectDialog({ users, companyId }: CreateProjectDialogProps) {
 export default function ProjectsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<{ [uid: string]: UserData }>({});
   const [loading, setLoading] = useState(true);
@@ -347,6 +348,7 @@ export default function ProjectsPage() {
               title: "Comment Added",
               description: "Your comment has been posted.",
           });
+          router.refresh();
       } else {
           toast({
               variant: "destructive",
