@@ -8,7 +8,6 @@ import {
   Home,
   Leaf,
   ListChecks,
-  Search,
   Warehouse,
   FolderKanban,
   Users,
@@ -19,13 +18,13 @@ import {
 } from 'lucide-react';
 import { SidebarProvider, Sidebar, SidebarTrigger, SidebarInset, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Toaster } from "@/components/ui/toaster"
 import UserProfile from '@/components/user-profile';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from "@/hooks/use-toast";
 import { checkFirebaseConfig } from '@/lib/firebase';
 import FirebaseConfigError from '@/components/firebase-config-error';
+import GlobalSearch from '@/components/global-search';
 
 
 import './globals.css';
@@ -133,14 +132,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
                 <SidebarInset>
                   <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
                     <SidebarTrigger variant="outline" />
-                    <div className="relative ml-auto flex-1 md:grow-0">
-                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        type="search"
-                        placeholder="Search..."
-                        className="w-full rounded-lg bg-background pl-8 md:w-[200px] lg:w-[320px]"
-                      />
-                    </div>
+                    <GlobalSearch />
                     <Button variant="outline" size="icon" className="ml-auto sm:ml-0 h-10 w-10">
                       <Bell className="h-5 w-5" />
                       <span className="sr-only">Toggle notifications</span>
