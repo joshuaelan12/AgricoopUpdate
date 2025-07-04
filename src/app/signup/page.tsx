@@ -12,12 +12,13 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Leaf } from "lucide-react";
+import { Leaf, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { auth, db } from "@/lib/firebase";
-import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
-import { collection, query, where, getDocs, addDoc, setDoc, doc, serverTimestamp } from "firebase/firestore";
+import { signUpUser } from "@/lib/actions/auth.actions";
+import type { SignUpUserInput } from "@/lib/schemas";
 
 export default function SignUpPage() {
   const [fullName, setFullName] = useState("");
@@ -50,58 +51,32 @@ export default function SignUpPage() {
 
     setIsLoading(true);
     try {
-      // Check if company already exists
-      const companiesRef = collection(db, "companies");
-      const q = query(companiesRef, where("name", "==", companyName.trim()));
-      const querySnapshot = await getDocs(q);
+      const input: SignUpUserInput = {
+        fullName,
+        companyName,
+        email,
+        password,
+      };
 
-      if (!querySnapshot.empty) {
+      const result = await signUpUser(input);
+
+      if (result.success) {
+        // After successful server-side creation, log the user in on the client
+        await signInWithEmailAndPassword(auth, email, password);
+        // AuthAndRoutingController will handle redirection
+        router.push("/admin-dashboard");
+      } else {
         toast({
           variant: "destructive",
           title: "Sign Up Failed",
-          description: "A company with this name already exists. Please choose a different name or log in.",
+          description: result.error || "An unknown error occurred.",
         });
-        setIsLoading(false);
-        return;
       }
-
-      // 1. Create user in Firebase Auth
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-
-      // 2. Update Firebase Auth profile
-      await updateProfile(user, { displayName: fullName });
-
-      // 3. Create the new company and set user as Admin
-      const newCompanyRef = await addDoc(companiesRef, {
-        name: companyName.trim(),
-        createdAt: serverTimestamp(),
-      });
-      const companyId = newCompanyRef.id;
-      const userRole = 'Admin';
-
-      // 4. Create user document in 'users' collection
-      await setDoc(doc(db, "users", user.uid), {
-        uid: user.uid,
-        displayName: fullName,
-        email: user.email,
-        companyId: companyId,
-        role: userRole,
-        createdAt: serverTimestamp(),
-      });
-
-      // Redirect to admin dashboard on successful signup
-      router.push("/admin-dashboard");
-
     } catch (error: any) {
-       let errorMessage = error.message;
-        if (error.code === 'auth/email-already-exists') {
-           errorMessage = 'This email address is already in use by another account.';
-        }
       toast({
         variant: "destructive",
         title: "Sign Up Failed",
-        description: errorMessage,
+        description: "An unexpected client-side error occurred. Please try again.",
       });
     } finally {
       setIsLoading(false);
@@ -164,7 +139,7 @@ export default function SignUpPage() {
               <Input id="confirm-password" type="password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
             </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Creating Account...' : 'Sign Up'}
+              {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating Account...</> : 'Sign Up'}
             </Button>
           </form>
           <div className="mt-4 text-center text-sm">

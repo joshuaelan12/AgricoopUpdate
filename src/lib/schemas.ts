@@ -47,3 +47,19 @@ export const CreateResourceInputSchema = z.object({
 });
 
 export type CreateResourceInput = z.infer<typeof CreateResourceInputSchema>;
+
+
+// --- Auth Schemas ---
+export const SignUpUserInputSchema = z.object({
+  fullName: z.string().min(1, "Your full name is required."),
+  companyName: z.string().min(1, "Company name is required."),
+  email: z.string().email("Invalid email address."),
+  password: z.string().min(6, "Password must be at least 6 characters."),
+});
+export type SignUpUserInput = z.infer<typeof SignUpUserInputSchema>;
+
+export const SignUpUserOutputSchema = z.object({
+    success: z.boolean(),
+    error: z.string().optional(),
+});
+export type SignUpUserOutput = z.infer<typeof SignUpUserOutputSchema>;
