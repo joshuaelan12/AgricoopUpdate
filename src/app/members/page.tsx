@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   CardContent,
@@ -54,34 +54,35 @@ export default function MembersPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchMembers = async () => {
-      if (!user?.companyId) {
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
+  const fetchMembers = useCallback(async () => {
+    if (!user?.companyId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
 
-      try {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('companyId', '==', user.companyId));
-        const querySnapshot = await getDocs(q);
-        
-        const membersData = querySnapshot.docs.map(doc => ({
-          ...doc.data(),
-          status: 'Active', // Assuming all users in DB are active
-        })) as Member[];
-        
-        setMembers(membersData);
-      } catch (error) {
-        console.error("Error fetching members:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchMembers();
+    try {
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('companyId', '==', user.companyId));
+      const querySnapshot = await getDocs(q);
+      
+      const membersData = querySnapshot.docs.map(doc => ({
+        ...doc.data(),
+        status: 'Active', // Assuming all users in DB are active
+      })) as Member[];
+      
+      setMembers(membersData);
+    } catch (error) {
+      console.error("Error fetching members:", error);
+      setMembers([]); // Clear data on error
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
+
+  useEffect(() => {
+    fetchMembers();
+  }, [fetchMembers]);
 
   if (loading) {
     return <MembersSkeleton />;
