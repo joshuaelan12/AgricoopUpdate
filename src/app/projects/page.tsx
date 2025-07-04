@@ -266,6 +266,7 @@ export default function ProjectsPage() {
   const [users, setUsers] = useState<{ [uid: string]: UserData }>({});
   const [loading, setLoading] = useState(true);
   const [updatingProgressId, setUpdatingProgressId] = useState<string | null>(null);
+  const [liveProgress, setLiveProgress] = useState<{ [projectId: string]: number }>({});
 
 
   useEffect(() => {
@@ -275,6 +276,7 @@ export default function ProjectsPage() {
         return;
       }
       setLoading(true);
+      setLiveProgress({}); // Reset live progress on new fetch
       try {
         const { companyId } = user;
         const projectsRef = collection(db, 'projects');
@@ -348,6 +350,8 @@ export default function ProjectsPage() {
           {projects.map((project) => {
             const canUpdate = user && project.team.includes(user.uid);
             const isUpdating = updatingProgressId === project.id;
+            const displayProgress = liveProgress[project.id] ?? project.progress;
+
             return (
               <Card key={project.id} className="flex flex-col">
                 <CardHeader>
@@ -375,10 +379,13 @@ export default function ProjectsPage() {
                     </div>
                     {canUpdate ? (
                       <Slider
-                        defaultValue={[project.progress]}
+                        value={[displayProgress]}
                         max={100}
                         step={1}
                         disabled={isUpdating}
+                        onValueChange={(value) => {
+                          setLiveProgress(prev => ({...prev, [project.id]: value[0]}))
+                        }}
                         onValueCommit={async (value) => {
                           setUpdatingProgressId(project.id);
                           const result = await updateProjectProgress({
@@ -391,8 +398,13 @@ export default function ProjectsPage() {
                               title: "Update Failed",
                               description: result.error,
                             });
+                             // On failure, revert the UI by removing the live progress value
+                            setLiveProgress(prev => {
+                                const newState = {...prev};
+                                delete newState[project.id];
+                                return newState;
+                            });
                           }
-                          // No toast on success to avoid being noisy. The UI update is feedback enough.
                           setUpdatingProgressId(null);
                         }}
                         className="my-2"
@@ -400,7 +412,7 @@ export default function ProjectsPage() {
                     ) : (
                       <Progress value={project.progress} className="mt-1 h-2" />
                     )}
-                    <span className="text-xs text-muted-foreground">{project.progress}% complete</span>
+                    <span className="text-xs text-muted-foreground">{displayProgress}% complete</span>
                   </div>
                 </CardContent>
                 <CardFooter>
