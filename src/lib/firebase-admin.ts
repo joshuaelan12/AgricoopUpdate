@@ -1,3 +1,5 @@
+'use server';
+
 import * as admin from 'firebase-admin';
 import { getApps, initializeApp, App } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
@@ -6,6 +8,14 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 let app: App;
 
 if (getApps().length === 0) {
+    // Check for a common typo to provide a more helpful error.
+    if (process.env.FIREBASE_SDK_CONFIG && !process.env.FIREBASE_ADMIN_SDK_CONFIG) {
+        throw new Error(`Incorrect environment variable set.
+        You have set FIREBASE_SDK_CONFIG, but the Admin SDK requires FIREBASE_ADMIN_SDK_CONFIG.
+        Please rename the variable in your .env.local file to FIREBASE_ADMIN_SDK_CONFIG.
+        This is for server-side authentication and is different from the client-side Firebase config.`);
+    }
+
     if (process.env.FIREBASE_ADMIN_SDK_CONFIG) {
         try {
             const serviceAccount = JSON.parse(process.env.FIREBASE_ADMIN_SDK_CONFIG);
@@ -14,7 +24,14 @@ if (getApps().length === 0) {
             });
         } catch (e: any) {
              console.error("Failed to parse FIREBASE_ADMIN_SDK_CONFIG:", e.message);
-             throw new Error("The FIREBASE_ADMIN_SDK_CONFIG environment variable is not a valid JSON object. Please check your .env.local file.");
+             throw new Error(`The FIREBASE_ADMIN_SDK_CONFIG environment variable is not a valid JSON object.
+             
+             How to fix:
+             1. Please check your .env.local file.
+             2. Ensure the entire JSON object you copied from Firebase is enclosed in single quotes.
+             Example: FIREBASE_ADMIN_SDK_CONFIG='{...}'
+             
+             Failing to enclose the value in quotes is a common cause of this error.`);
         }
     } else {
        throw new Error(`Firebase Admin authentication failed.
