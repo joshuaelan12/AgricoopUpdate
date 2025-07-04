@@ -154,7 +154,7 @@ function ProjectPreviewDialog({ project, users }: { project: PlanningProject, us
 
 
 // --- EDIT PLANNING DIALOG ---
-function EditPlanningDialog({ project, resources, onActionComplete }: { project: PlanningProject, resources: Resource[], onActionComplete: () => void }) {
+function EditPlanningDialog({ project, resources, user, onActionComplete }: { project: PlanningProject, resources: Resource[], user: {displayName: string}, onActionComplete: () => void }) {
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
   
@@ -186,7 +186,7 @@ function EditPlanningDialog({ project, resources, onActionComplete }: { project:
       projectId: project.id,
       resourceId: resourceToAllocate,
       quantity: Number(quantityToAllocate),
-    });
+    }, user.displayName);
 
     if (result.success) {
       toast({ title: 'Resource Allocated' });
@@ -201,7 +201,7 @@ function EditPlanningDialog({ project, resources, onActionComplete }: { project:
 
   const handleDeallocateResource = async (resourceId: string) => {
     setIsDeallocating(resourceId);
-    const result = await deallocateResourceFromProject({ projectId: project.id, resourceId });
+    const result = await deallocateResourceFromProject({ projectId: project.id, resourceId }, user.displayName);
     if (result.success) {
       toast({ title: 'Resource Deallocated' });
       onActionComplete();
@@ -212,7 +212,7 @@ function EditPlanningDialog({ project, resources, onActionComplete }: { project:
   };
 
   const onSubmit = async (values: UpdateProjectPlanningInput) => {
-    const result = await updateProjectPlanning(values);
+    const result = await updateProjectPlanning(values, user.displayName);
     if (result.success) {
       toast({
         title: "Planning Details Updated",
@@ -527,7 +527,12 @@ export default function PlanningPage() {
                       <div className="flex items-center justify-end gap-2">
                         <ProjectPreviewDialog project={project} users={users} />
                         {(user.role === 'Admin' || user.role === 'Project Manager') && (
-                          <EditPlanningDialog project={project} resources={resources} onActionComplete={fetchData} />
+                          <EditPlanningDialog 
+                            project={project} 
+                            resources={resources} 
+                            user={{displayName: user.displayName}} 
+                            onActionComplete={fetchData} 
+                          />
                         )}
                       </div>
                     </TableCell>

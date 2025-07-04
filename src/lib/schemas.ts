@@ -57,7 +57,7 @@ export const DeleteProjectCommentInputSchema = z.object({
 export type DeleteProjectCommentInput = z.infer<typeof DeleteProjectCommentInputSchema>;
 
 export const UpdateProjectInputSchema = z.object({
-  id: z.string(),
+  projectId: z.string(),
   title: z.string().min(1, "Title is required."),
   description: z.string().min(1, "Description is required."),
 });

@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import { adminAuth, adminDb, FieldValue } from '@/lib/firebase-admin';
 import { SignUpUserInputSchema, type SignUpUserInput, type SignUpUserOutput } from '@/lib/schemas';
+import { logActivity } from './activity.actions';
 
 
 export async function signUpUser(input: SignUpUserInput): Promise<SignUpUserOutput> {
@@ -43,6 +44,8 @@ export async function signUpUser(input: SignUpUserInput): Promise<SignUpUserOutp
         });
 
         await batch.commit();
+
+        await logActivity(newCompanyRef.id, `${validatedInput.fullName} created the company account for "${validatedInput.companyName}".`);
 
         return { success: true };
 

@@ -57,7 +57,7 @@ export default function CreateUserPage() {
     };
 
     try {
-      const result = await createUser(input);
+      const result = await createUser(input, adminUser.displayName);
       if (result.success && result.user) {
         toast({
           title: 'User Created',

@@ -3,9 +3,10 @@
 import { z } from 'zod';
 import { adminAuth, adminDb, FieldValue } from '@/lib/firebase-admin';
 import { CreateUserInputSchema, type CreateUserInput, type CreateUserOutput } from '@/lib/schemas';
+import { logActivity } from './activity.actions';
 
 
-export async function createUser(input: CreateUserInput): Promise<CreateUserOutput> {
+export async function createUser(input: CreateUserInput, actorName: string): Promise<CreateUserOutput> {
     try {
       // Validate input on the server for security
       const validatedInput = CreateUserInputSchema.parse(input);
@@ -26,6 +27,8 @@ export async function createUser(input: CreateUserInput): Promise<CreateUserOutp
         role: validatedInput.role,
         createdAt: FieldValue.serverTimestamp(),
       });
+
+      await logActivity(validatedInput.companyId, `${actorName} created a new user account for ${validatedInput.displayName}.`);
 
       return {
         success: true,

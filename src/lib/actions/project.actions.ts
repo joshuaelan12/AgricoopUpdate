@@ -26,9 +26,10 @@ import {
     type AllocateResourceInput,
     type DeallocateResourceInput
 } from '@/lib/schemas';
+import { logActivity } from './activity.actions';
 
 // --- SERVER ACTION ---
-export async function createProject(input: CreateProjectInput) {
+export async function createProject(input: CreateProjectInput, actorName: string) {
     try {
         const validatedInput = CreateProjectInputSchema.parse(input);
 
@@ -48,7 +49,8 @@ export async function createProject(input: CreateProjectInput) {
             updatedAt: FieldValue.serverTimestamp(),
         });
         
-        revalidatePath('/projects'); // Invalidate cache for the projects page
+        await logActivity(validatedInput.companyId, `${actorName} created a new project: "${validatedInput.title}".`);
+        revalidatePath('/projects');
         
         return { success: true, projectId: newProjectRef.id };
 
@@ -61,18 +63,22 @@ export async function createProject(input: CreateProjectInput) {
     }
 }
 
-export async function updateProjectProgress(input: UpdateProjectProgressInput) {
+export async function updateProjectProgress(input: UpdateProjectProgressInput, actorName: string) {
     try {
         const validatedInput = UpdateProjectProgressInputSchema.parse(input);
         const { projectId, progress } = validatedInput;
 
         const projectRef = adminDb.collection('projects').doc(projectId);
+        const projectDoc = await projectRef.get();
+        if (!projectDoc.exists) throw new Error("Project not found.");
+        const projectData = projectDoc.data()!;
         
         await projectRef.update({
             progress: progress,
             updatedAt: FieldValue.serverTimestamp(),
         });
-
+        
+        await logActivity(projectData.companyId, `${actorName} updated the progress of project "${projectData.title}" to ${progress}%.`);
         revalidatePath('/projects');
         revalidatePath('/'); // Also revalidate dashboard for charts
 
@@ -94,6 +100,9 @@ export async function addProjectComment(input: AddProjectCommentInput) {
         const { projectId, commentText, userId, userName } = validatedInput;
 
         const projectRef = adminDb.collection('projects').doc(projectId);
+        const projectDoc = await projectRef.get();
+        if (!projectDoc.exists) throw new Error("Project not found.");
+        const projectData = projectDoc.data()!;
 
         const newComment = {
             id: adminDb.collection('projects').doc().id,
@@ -107,6 +116,7 @@ export async function addProjectComment(input: AddProjectCommentInput) {
             comments: FieldValue.arrayUnion(newComment)
         });
 
+        await logActivity(projectData.companyId, `${userName} commented on project "${projectData.title}".`);
         revalidatePath('/projects');
 
         return { success: true };
@@ -151,6 +161,7 @@ export async function deleteProjectComment(input: DeleteProjectCommentInput) {
             comments: FieldValue.arrayRemove(commentToDelete),
         });
 
+        await logActivity(projectData.companyId, `${commentToDelete.authorName} deleted a comment from project "${projectData.title}".`);
         revalidatePath('/projects');
 
         return { success: true };
@@ -164,18 +175,22 @@ export async function deleteProjectComment(input: DeleteProjectCommentInput) {
     }
 }
 
-export async function updateProject(input: UpdateProjectInput) {
+export async function updateProject(input: UpdateProjectInput, actorName: string) {
     try {
         const validatedInput = UpdateProjectInputSchema.parse(input);
-        const { id, ...updateData } = validatedInput;
+        const { projectId, ...updateData } = validatedInput;
 
-        const projectRef = adminDb.collection('projects').doc(id);
+        const projectRef = adminDb.collection('projects').doc(projectId);
+        const projectDoc = await projectRef.get();
+        if (!projectDoc.exists) throw new Error("Project not found.");
+        const projectData = projectDoc.data()!;
         
         await projectRef.update({
             ...updateData,
             updatedAt: FieldValue.serverTimestamp(),
         });
         
+        await logActivity(projectData.companyId, `${actorName} edited the details of project "${validatedInput.title}".`);
         revalidatePath('/projects');
         
         return { success: true };
@@ -189,15 +204,19 @@ export async function updateProject(input: UpdateProjectInput) {
     }
 }
 
-export async function deleteProject(input: DeleteProjectInput) {
+export async function deleteProject(input: DeleteProjectInput, actorName: string) {
     try {
         const validatedInput = DeleteProjectInputSchema.parse(input);
         const { projectId } = validatedInput;
 
         const projectRef = adminDb.collection('projects').doc(projectId);
+        const projectDoc = await projectRef.get();
+        if (!projectDoc.exists) throw new Error("Project not found.");
+        const projectData = projectDoc.data()!;
         
         await projectRef.delete();
         
+        await logActivity(projectData.companyId, `${actorName} deleted project "${projectData.title}".`);
         revalidatePath('/projects');
         revalidatePath('/');
         
@@ -212,18 +231,22 @@ export async function deleteProject(input: DeleteProjectInput) {
     }
 }
 
-export async function updateProjectStatus(input: UpdateProjectStatusInput) {
+export async function updateProjectStatus(input: UpdateProjectStatusInput, actorName: string) {
     try {
         const validatedInput = UpdateProjectStatusInputSchema.parse(input);
         const { projectId, status } = validatedInput;
 
         const projectRef = adminDb.collection('projects').doc(projectId);
+        const projectDoc = await projectRef.get();
+        if (!projectDoc.exists) throw new Error("Project not found.");
+        const projectData = projectDoc.data()!;
 
         await projectRef.update({
             status: status,
             updatedAt: FieldValue.serverTimestamp(),
         });
 
+        await logActivity(projectData.companyId, `${actorName} updated the status of project "${projectData.title}" to "${status}".`);
         revalidatePath('/projects');
         revalidatePath('/'); // Dashboard might show project statuses
 
@@ -238,12 +261,15 @@ export async function updateProjectStatus(input: UpdateProjectStatusInput) {
     }
 }
 
-export async function updateProjectPlanning(input: UpdateProjectPlanningInput) {
+export async function updateProjectPlanning(input: UpdateProjectPlanningInput, actorName: string) {
     try {
         const validatedInput = UpdateProjectPlanningInputSchema.parse(input);
         const { projectId, ...planningData } = validatedInput;
 
         const projectRef = adminDb.collection('projects').doc(projectId);
+        const projectDoc = await projectRef.get();
+        if (!projectDoc.exists) throw new Error("Project not found.");
+        const projectData = projectDoc.data()!;
         
         const updateData = Object.fromEntries(
           Object.entries(planningData).filter(([, v]) => v !== undefined)
@@ -254,6 +280,7 @@ export async function updateProjectPlanning(input: UpdateProjectPlanningInput) {
             updatedAt: FieldValue.serverTimestamp(),
         });
         
+        await logActivity(projectData.companyId, `${actorName} updated the plan for project "${projectData.title}".`);
         revalidatePath('/planning');
         
         return { success: true };
@@ -268,11 +295,15 @@ export async function updateProjectPlanning(input: UpdateProjectPlanningInput) {
 }
 
 
-export async function allocateResourceToProject(input: AllocateResourceInput) {
+export async function allocateResourceToProject(input: AllocateResourceInput, actorName: string) {
     try {
         const { projectId, resourceId, quantity } = AllocateResourceInputSchema.parse(input);
         const projectRef = adminDb.collection('projects').doc(projectId);
         const resourceRef = adminDb.collection('resources').doc(resourceId);
+
+        let resourceName = "Unknown Resource";
+        let projectName = "Unknown Project";
+        let companyId = "";
 
         await adminDb.runTransaction(async (transaction) => {
             const resourceDoc = await transaction.get(resourceRef);
@@ -284,6 +315,11 @@ export async function allocateResourceToProject(input: AllocateResourceInput) {
             const resourceData = resourceDoc.data()!;
             const projectData = projectDoc.data()!;
             
+            // For logging
+            resourceName = resourceData.name;
+            projectName = projectData.title;
+            companyId = projectData.companyId;
+
             if (resourceData.quantity < quantity) {
                 throw new Error(`Not enough stock for ${resourceData.name}. Available: ${resourceData.quantity} kg.`);
             }
@@ -305,7 +341,8 @@ export async function allocateResourceToProject(input: AllocateResourceInput) {
                 })
             });
         });
-
+        
+        await logActivity(companyId, `${actorName} allocated ${quantity}kg of ${resourceName} to project "${projectName}".`);
         revalidatePath('/planning');
         revalidatePath('/resources');
 
@@ -317,11 +354,15 @@ export async function allocateResourceToProject(input: AllocateResourceInput) {
 }
 
 
-export async function deallocateResourceFromProject(input: DeallocateResourceInput) {
+export async function deallocateResourceFromProject(input: DeallocateResourceInput, actorName: string) {
     try {
         const { projectId, resourceId } = DeallocateResourceInputSchema.parse(input);
         const projectRef = adminDb.collection('projects').doc(projectId);
         const resourceRef = adminDb.collection('resources').doc(resourceId);
+        
+        let resourceToDeallocate: any;
+        let projectName = "Unknown Project";
+        let companyId = "";
 
         await adminDb.runTransaction(async (transaction) => {
             const projectDoc = await transaction.get(projectRef);
@@ -329,7 +370,10 @@ export async function deallocateResourceFromProject(input: DeallocateResourceInp
             
             const projectData = projectDoc.data()!;
             const allocatedResources = projectData.allocatedResources || [];
-            const resourceToDeallocate = allocatedResources.find((r: any) => r.resourceId === resourceId);
+            resourceToDeallocate = allocatedResources.find((r: any) => r.resourceId === resourceId);
+
+            projectName = projectData.title;
+            companyId = projectData.companyId;
 
             if (!resourceToDeallocate) {
                 throw new Error("Resource was not found in this project's allocations.");
@@ -343,6 +387,10 @@ export async function deallocateResourceFromProject(input: DeallocateResourceInp
                 allocatedResources: FieldValue.arrayRemove(resourceToDeallocate)
             });
         });
+        
+        if (resourceToDeallocate) {
+          await logActivity(companyId, `${actorName} deallocated ${resourceToDeallocate.name} from project "${projectName}".`);
+        }
 
         revalidatePath('/planning');
         revalidatePath('/resources');

@@ -82,7 +82,7 @@ const resourceStatuses = ["In Stock", "Good", "In Use", "On Track", "Low Stock",
 
 
 // --- ADD RESOURCE DIALOG ---
-function AddResourceDialog({ companyId, onResourceAdded }: { companyId: string, onResourceAdded: () => void }) {
+function AddResourceDialog({ companyId, actorName, onResourceAdded }: { companyId: string, actorName: string, onResourceAdded: () => void }) {
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
@@ -98,7 +98,7 @@ function AddResourceDialog({ companyId, onResourceAdded }: { companyId: string, 
   });
 
   const onSubmit = async (values: z.infer<typeof CreateResourceInputSchema>) => {
-    const result = await createResource(values);
+    const result = await createResource(values, actorName);
     if (result.success) {
       toast({
         title: "Resource Added",
@@ -188,7 +188,7 @@ function AddResourceDialog({ companyId, onResourceAdded }: { companyId: string, 
 }
 
 // --- EDIT RESOURCE DIALOG ---
-function EditResourceDialog({ resource, onResourceUpdated }: { resource: Resource, onResourceUpdated: () => void }) {
+function EditResourceDialog({ resource, actorName, onResourceUpdated }: { resource: Resource, actorName: string, onResourceUpdated: () => void }) {
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
@@ -204,7 +204,7 @@ function EditResourceDialog({ resource, onResourceUpdated }: { resource: Resourc
   });
 
   const onSubmit = async (values: UpdateResourceInput) => {
-    const result = await updateResource(values);
+    const result = await updateResource(values, actorName);
     if (result.success) {
       toast({
         title: "Resource Updated",
@@ -343,7 +343,7 @@ export default function ResourcesPage() {
           </p>
         </div>
         {user && (user.role === 'Admin' || user.role === 'Project Manager') && (
-            <AddResourceDialog companyId={user.companyId} onResourceAdded={fetchResources} />
+            <AddResourceDialog companyId={user.companyId} actorName={user.displayName} onResourceAdded={fetchResources} />
         )}
       </div>
       <Card>
@@ -381,7 +381,7 @@ export default function ResourcesPage() {
                     </TableCell>
                     {user?.role === 'Admin' && (
                         <TableCell className="text-right">
-                            <EditResourceDialog resource={resource} onResourceUpdated={fetchResources} />
+                            <EditResourceDialog resource={resource} actorName={user.displayName} onResourceUpdated={fetchResources} />
                         </TableCell>
                     )}
                   </TableRow>

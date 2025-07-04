@@ -17,17 +17,13 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
-  TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
 import { 
   XAxis, 
   YAxis, 
   CartesianGrid, 
   Tooltip, 
-  Legend, 
   ResponsiveContainer,
   BarChart,
   Bar,
@@ -43,13 +39,10 @@ interface DashboardStats {
   lowStockItems: string[];
 }
 
-interface RecentTask {
+interface ActivityLog {
   id: string;
-  name: string;
-  assignedTo: string;
-  status: string;
-  projectName: string;
-  updatedAt: Date;
+  message: string;
+  timestamp: Date;
 }
 
 type ProjectStatus = "Planning" | "In Progress" | "On Hold" | "Delayed" | "Completed";
@@ -85,13 +78,6 @@ interface ResourceData {
   status: string;
 }
 
-const statusVariant: { [key: string]: "default" | "secondary" | "destructive" | "outline" } = {
-  "Completed": "default",
-  "In Progress": "outline",
-  "Overdue": "destructive",
-  "Pending": "secondary"
-};
-
 // --- MAIN COMPONENT ---
 export default function Dashboard() {
   const { user } = useAuth();
@@ -101,7 +87,7 @@ export default function Dashboard() {
     resourceAlerts: 0,
     lowStockItems: [],
   });
-  const [recentTasks, setRecentTasks] = useState<RecentTask[]>([]);
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [projectsByStatus, setProjectsByStatus] = useState<{ [key: string]: Project[] }>({});
   const [allocationSummary, setAllocationSummary] = useState<{ name: string, allocated: number }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -110,7 +96,7 @@ export default function Dashboard() {
     if (!user?.companyId) {
       setLoading(false);
       setStats({ totalProjects: 0, activeMembers: 0, resourceAlerts: 0, lowStockItems: [] });
-      setRecentTasks([]);
+      setActivityLogs([]);
       setProjectsByStatus({});
       setAllocationSummary([]);
       return;
@@ -125,7 +111,7 @@ export default function Dashboard() {
     const projectsRef = collection(db, 'projects');
     const usersRef = collection(db, 'users');
     const resourcesRef = collection(db, 'resources');
-    const tasksRef = collection(db, 'tasks');
+    const logsRef = collection(db, 'activity_logs');
     
     // --- REAL-TIME LISTENERS ---
     
@@ -198,18 +184,18 @@ export default function Dashboard() {
       }));
     }));
 
-    // Recent tasks listener
-    const recentTasksQuery = query(tasksRef, where('companyId', '==', companyId), orderBy('updatedAt', 'desc'), limit(5));
-    unsubscribes.push(onSnapshot(recentTasksQuery, (snap) => {
-        const tasksData = snap.docs.map(doc => {
+    // Activity Log listener
+    const logsQuery = query(logsRef, where('companyId', '==', companyId), orderBy('timestamp', 'desc'), limit(7));
+    unsubscribes.push(onSnapshot(logsQuery, (snap) => {
+        const logsData = snap.docs.map(doc => {
             const data = doc.data();
             return {
                 id: doc.id,
-                ...data,
-                updatedAt: data.updatedAt?.toDate() // Safely convert timestamp
+                message: data.message,
+                timestamp: data.timestamp?.toDate()
             };
-        }).filter(t => t.updatedAt) as RecentTask[];
-      setRecentTasks(tasksData);
+        }).filter(l => l.timestamp) as ActivityLog[];
+        setActivityLogs(logsData);
     }));
 
     setLoading(false);
@@ -271,41 +257,26 @@ export default function Dashboard() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <Card className="col-span-4">
           <CardHeader>
-            <CardTitle className="font-headline">Recent Activity</CardTitle>
+            <CardTitle className="font-headline">Activity Log</CardTitle>
             <CardDescription>
-              An overview of the latest task updates.
+              A real-time feed of recent actions in the app.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Task</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Project</TableHead>
-                  <TableHead className="text-right">Last Update</TableHead>
-                </TableRow>
-              </TableHeader>
               <TableBody>
-                {recentTasks.length > 0 ? (
-                  recentTasks.map(task => (
-                    <TableRow key={task.id}>
-                      <TableCell>
-                        <div className="font-medium">{task.name}</div>
-                        <div className="hidden text-sm text-muted-foreground md:inline">
-                          Assigned to: {task.assignedTo}
-                        </div>
+                {activityLogs.length > 0 ? (
+                  activityLogs.map(log => (
+                    <TableRow key={log.id}>
+                      <TableCell>{log.message}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {formatDistanceToNow(log.timestamp, { addSuffix: true })}
                       </TableCell>
-                      <TableCell>
-                        <Badge variant={statusVariant[task.status] || 'secondary'}>{task.status}</Badge>
-                      </TableCell>
-                      <TableCell>{task.projectName}</TableCell>
-                      <TableCell className="text-right">{formatDistanceToNow(task.updatedAt, { addSuffix: true })}</TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center h-24">No recent activity.</TableCell>
+                    <TableCell colSpan={2} className="text-center h-24">No recent activity.</TableCell>
                   </TableRow>
                 )}
               </TableBody>
@@ -423,12 +394,8 @@ const DashboardSkeleton = () => (
           <div className="space-y-4">
             {[...Array(3)].map((_, i) => (
               <div key={i} className="flex justify-between items-center">
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-3 w-32" />
-                </div>
-                <Skeleton className="h-6 w-20 rounded-full" />
-                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-4/5" />
+                <Skeleton className="h-4 w-1/5" />
               </div>
             ))}
           </div>

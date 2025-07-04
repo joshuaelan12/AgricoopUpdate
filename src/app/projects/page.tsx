@@ -151,9 +151,10 @@ const ProjectCardSkeleton = () => (
 type CreateProjectDialogProps = {
   users: UserData[];
   companyId: string;
+  actorName: string;
 };
 
-function CreateProjectDialog({ users, companyId }: CreateProjectDialogProps) {
+function CreateProjectDialog({ users, companyId, actorName }: CreateProjectDialogProps) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
@@ -170,7 +171,7 @@ function CreateProjectDialog({ users, companyId }: CreateProjectDialogProps) {
   });
 
   const onSubmit = async (values: z.infer<typeof CreateProjectInputSchema>) => {
-    const result = await createProject(values);
+    const result = await createProject(values, actorName);
     if (result.success) {
       toast({
         title: "Project Created",
@@ -281,21 +282,21 @@ function CreateProjectDialog({ users, companyId }: CreateProjectDialogProps) {
 }
 
 // --- PROJECT ACTIONS (EDIT/DELETE) COMPONENT ---
-function EditProjectDialog({ project, onActionComplete }: { project: Project, onActionComplete: () => void }) {
+function EditProjectDialog({ project, actorName, onActionComplete }: { project: Project, actorName: string, onActionComplete: () => void }) {
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
   
   const form = useForm<UpdateProjectInput>({
     resolver: zodResolver(UpdateProjectInputSchema),
     defaultValues: {
-      id: project.id,
+      projectId: project.id,
       title: project.title,
       description: project.description,
     },
   });
 
   const onSubmit = async (values: UpdateProjectInput) => {
-    const result = await updateProject(values);
+    const result = await updateProject(values, actorName);
     if (result.success) {
       toast({
         title: "Project Updated",
@@ -357,13 +358,13 @@ function EditProjectDialog({ project, onActionComplete }: { project: Project, on
   );
 }
 
-function ProjectActions({ project, onActionComplete }: { project: Project; onActionComplete: () => void }) {
+function ProjectActions({ project, actorName, onActionComplete }: { project: Project; actorName: string; onActionComplete: () => void }) {
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDelete = async () => {
     setIsDeleting(true);
-    const result = await deleteProject({ projectId: project.id });
+    const result = await deleteProject({ projectId: project.id }, actorName);
     if (result.success) {
       toast({
         title: "Project Deleted",
@@ -389,7 +390,7 @@ function ProjectActions({ project, onActionComplete }: { project: Project; onAct
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <EditProjectDialog project={project} onActionComplete={onActionComplete} />
+        <EditProjectDialog project={project} actorName={actorName} onActionComplete={onActionComplete} />
         <DropdownMenuSeparator />
         <AlertDialog>
           <AlertDialogTrigger asChild>
@@ -543,11 +544,13 @@ export default function ProjectsPage() {
   };
   
   const handleStatusChange = async (projectId: string, newStatus: Project['status']) => {
+    if (!user) return;
     setUpdatingStatusId(projectId);
     const result = await updateProjectStatus({
         projectId: projectId,
         status: newStatus,
-    });
+    }, user.displayName);
+
     if (result.success) {
         toast({ title: "Status Updated" });
         router.refresh();
@@ -573,7 +576,8 @@ export default function ProjectsPage() {
          {user && (user.role === 'Admin' || user.role === 'Project Manager') && !loading && (
           <CreateProjectDialog 
             users={Object.values(users)} 
-            companyId={user.companyId} 
+            companyId={user.companyId}
+            actorName={user.displayName}
           />
         )}
       </div>
@@ -640,7 +644,7 @@ export default function ProjectsPage() {
                           <Badge className={`${statusColors[project.status]} text-primary-foreground mt-1`}>{project.status}</Badge>
                         )}
                       </div>
-                      {user?.role === 'Admin' && <ProjectActions project={project} onActionComplete={() => router.refresh()} />}
+                      {user?.role === 'Admin' && <ProjectActions project={project} actorName={user.displayName} onActionComplete={() => router.refresh()} />}
                   </div>
                   <CardDescription className="pt-2">{project.description}</CardDescription>
                 </CardHeader>
@@ -660,11 +664,12 @@ export default function ProjectsPage() {
                           setLiveProgress(prev => ({...prev, [project.id]: value[0]}))
                         }}
                         onValueCommit={async (value) => {
+                          if (!user) return;
                           setUpdatingProgressId(project.id);
                           const result = await updateProjectProgress({
                             projectId: project.id,
                             progress: value[0],
-                          });
+                          }, user.displayName);
                           if (!result.success) {
                             toast({
                               variant: "destructive",
