@@ -22,18 +22,24 @@ const requiredVars = [
 
 const missingVars = requiredVars.filter(varName => !process.env[varName]);
 
-if (missingVars.length > 0) {
-    throw new Error(`Firebase client configuration is missing.
+let app, auth, db;
+
+if (missingVars.length === 0) {
+    app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+    auth = getAuth(app);
+    db = getFirestore(app);
+}
+
+// This function will be called from within a React component.
+// This ensures that if it throws, the error will be caught by an Error Boundary.
+export function checkFirebaseConfig() {
+    if (missingVars.length > 0) {
+        throw new Error(`Firebase client configuration is missing.
     Please create a .env.local file and add the following environment variables:
     ${missingVars.join('\n')}
     
     You can find these values in your Firebase project settings under "General". Look for the web app configuration object.`);
+    }
 }
-
-
-// Initialize Firebase
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-const auth = getAuth(app);
-const db = getFirestore(app);
 
 export { app, auth, db };

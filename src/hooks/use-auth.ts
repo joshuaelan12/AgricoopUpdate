@@ -17,8 +17,15 @@ export function useAuth() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // If Firebase isn't configured, auth will be undefined.
+        // Prevent onAuthStateChanged from throwing an error.
+        if (!auth) {
+            setLoading(false);
+            return;
+        }
+
         const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
-            if (authUser) {
+            if (authUser && db) {
                 const userDocRef = doc(db, "users", authUser.uid);
                 const userDocSnap = await getDoc(userDocRef);
 

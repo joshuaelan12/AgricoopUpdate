@@ -20,6 +20,8 @@ import { Toaster } from "@/components/ui/toaster"
 import UserProfile from '@/components/user-profile';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from "@/hooks/use-toast";
+import { checkFirebaseConfig } from '@/lib/firebase';
+import FirebaseConfigError from '@/components/firebase-config-error';
 
 
 import './globals.css';
@@ -114,11 +116,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
     )
 }
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+function AuthAndRoutingController({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
@@ -168,6 +166,40 @@ export default function RootLayout({
                             (user && isAuthPage) || 
                             (user && isAdminPage && user.role !== 'Admin');
 
+  if (showLoadingScreen) {
+    return (
+      <div className="flex min-h-screen w-full items-center justify-center bg-background">
+          <Leaf className="h-16 w-16 animate-spin text-primary" />
+      </div>
+    );
+  }
+  
+  if (isAuthPage || isAdminPage) {
+    return <>{children}</>;
+  }
+
+  return <AppLayout>{children}</AppLayout>;
+}
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  let hasFirebaseConfigError = false;
+  try {
+    // This check must be wrapped in a try/catch in the RootLayout
+    // because it cannot be caught by the error.tsx boundary.
+    checkFirebaseConfig();
+  } catch (error: any) {
+    if (error.message.includes('Firebase client configuration is missing')) {
+      hasFirebaseConfigError = true;
+    } else {
+      // For any other error, re-throw it to be handled by Next.js.
+      throw error;
+    }
+  }
+
   return (
     <html lang="en">
       <head>
@@ -178,16 +210,10 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..900;1,400..900&family=Belleza&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased">
-        {showLoadingScreen ? (
-            <div className="flex min-h-screen w-full items-center justify-center bg-background">
-                <Leaf className="h-16 w-16 animate-spin text-primary" />
-            </div>
-        ) : (isAuthPage || isAdminPage) ? (
-            <>
-                {children}
-            </>
+        {hasFirebaseConfigError ? (
+          <FirebaseConfigError />
         ) : (
-            <AppLayout>{children}</AppLayout>
+          <AuthAndRoutingController>{children}</AuthAndRoutingController>
         )}
         <Toaster />
       </body>
