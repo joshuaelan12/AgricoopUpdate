@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
     "build": "next build",
@@ -45,7 +45,7 @@
     "firebase-admin": "^12.1.1",
     "genkit": "^1.13.0",
     "lucide-react": "^0.475.0",
-    "next": "15.3.3",
+    "next": "14.2.4",
     "patch-package": "^8.0.0",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
