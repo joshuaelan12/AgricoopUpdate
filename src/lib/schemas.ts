@@ -74,6 +74,16 @@ export const UpdateProjectStatusInputSchema = z.object({
 });
 export type UpdateProjectStatusInput = z.infer<typeof UpdateProjectStatusInputSchema>;
 
+export const UpdateProjectPlanningInputSchema = z.object({
+  projectId: z.string(),
+  objectives: z.string().optional(),
+  expectedOutcomes: z.string().optional(),
+  priority: z.enum(['Low', 'Medium', 'High']),
+  deadline: z.date().nullable().optional(),
+  estimatedBudget: z.coerce.number().min(0, "Budget must be a positive number.").optional(),
+});
+export type UpdateProjectPlanningInput = z.infer<typeof UpdateProjectPlanningInputSchema>;
+
 
 // --- Resource Schemas ---
 

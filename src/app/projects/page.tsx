@@ -85,6 +85,11 @@ interface Project {
   team: string[]; // Array of user UIDs
   companyId: string;
   comments: Comment[];
+  objectives?: string;
+  expectedOutcomes?: string;
+  priority?: 'Low' | 'Medium' | 'High';
+  deadline?: any; // Firestore timestamp, will be converted to Date
+  estimatedBudget?: number;
 }
 
 interface UserData {

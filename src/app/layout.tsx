@@ -12,6 +12,7 @@ import {
   Warehouse,
   FolderKanban,
   Users,
+  GanttChartSquare,
 } from 'lucide-react';
 import { SidebarProvider, Sidebar, SidebarTrigger, SidebarInset, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
@@ -28,6 +29,7 @@ import './globals.css';
 
 function AppLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
+    const { user } = useAuth();
     const isActive = (path: string) => pathname === path;
 
     return (
@@ -74,6 +76,16 @@ function AppLayout({ children }: { children: React.ReactNode }) {
                                 </Link>
                             </SidebarMenuButton>
                         </SidebarMenuItem>
+                         {user && (user.role === 'Admin' || user.role === 'Project Manager') && (
+                          <SidebarMenuItem>
+                            <SidebarMenuButton asChild tooltip="Planning" isActive={isActive('/planning')}>
+                                  <Link href="/planning">
+                                      <GanttChartSquare />
+                                      <span>Planning</span>
+                                  </Link>
+                              </SidebarMenuButton>
+                          </SidebarMenuItem>
+                        )}
                         <SidebarMenuItem>
                            <SidebarMenuButton asChild tooltip="Checklist Builder" isActive={isActive('/checklist-builder')}>
                                 <Link href="/checklist-builder">

@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import { adminDb, FieldValue } from '@/lib/firebase-admin';
 import { revalidatePath } from 'next/cache';
-import { CreateProjectInputSchema, UpdateProjectProgressInputSchema, AddProjectCommentInputSchema, DeleteProjectCommentInputSchema, type CreateProjectInput, type UpdateProjectProgressInput, type AddProjectCommentInput, type DeleteProjectCommentInput, UpdateProjectInputSchema, DeleteProjectInputSchema, type UpdateProjectInput, type DeleteProjectInput, UpdateProjectStatusInputSchema, type UpdateProjectStatusInput } from '@/lib/schemas';
+import { CreateProjectInputSchema, UpdateProjectProgressInputSchema, AddProjectCommentInputSchema, DeleteProjectCommentInputSchema, type CreateProjectInput, type UpdateProjectProgressInput, type AddProjectCommentInput, type DeleteProjectCommentInput, UpdateProjectInputSchema, DeleteProjectInputSchema, type UpdateProjectInput, type DeleteProjectInput, UpdateProjectStatusInputSchema, type UpdateProjectStatusInput, UpdateProjectPlanningInputSchema, type UpdateProjectPlanningInput } from '@/lib/schemas';
 
 // --- SERVER ACTION ---
 export async function createProject(input: CreateProjectInput) {
@@ -17,6 +17,11 @@ export async function createProject(input: CreateProjectInput) {
             ...validatedInput,
             progress: 0,
             comments: [],
+            objectives: '',
+            expectedOutcomes: '',
+            priority: 'Medium',
+            deadline: null,
+            estimatedBudget: 0,
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
         });
@@ -209,6 +214,35 @@ export async function updateProjectStatus(input: UpdateProjectStatusInput) {
 
     } catch (error: any) {
         console.error("Error updating project status:", error);
+        if (error instanceof z.ZodError) {
+            return { success: false, error: "Validation failed.", issues: error.flatten() };
+        }
+        return { success: false, error: error.message || "An unknown error occurred." };
+    }
+}
+
+export async function updateProjectPlanning(input: UpdateProjectPlanningInput) {
+    try {
+        const validatedInput = UpdateProjectPlanningInputSchema.parse(input);
+        const { projectId, ...planningData } = validatedInput;
+
+        const projectRef = adminDb.collection('projects').doc(projectId);
+        
+        const updateData = Object.fromEntries(
+          Object.entries(planningData).filter(([, v]) => v !== undefined)
+        );
+
+        await projectRef.update({
+            ...updateData,
+            updatedAt: FieldValue.serverTimestamp(),
+        });
+        
+        revalidatePath('/planning');
+        
+        return { success: true };
+
+    } catch (error: any) {
+        console.error("Error updating project planning:", error);
         if (error instanceof z.ZodError) {
             return { success: false, error: "Validation failed.", issues: error.flatten() };
         }
