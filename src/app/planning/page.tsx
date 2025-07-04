@@ -339,7 +339,7 @@ function EditPlanningDialog({ project, resources, onActionComplete }: { project:
             
             {/* Allocated Resources List */}
             <div>
-              <FormLabel>Currently Allocated</FormLabel>
+              <label className="text-sm font-medium leading-none">Currently Allocated</label>
               <div className="mt-2 space-y-2">
                 {project.allocatedResources.length > 0 ? (
                   project.allocatedResources.map(res => (
@@ -361,7 +361,7 @@ function EditPlanningDialog({ project, resources, onActionComplete }: { project:
 
             {/* Allocate New Resource Form */}
             <div>
-                <FormLabel>Allocate New Resource</FormLabel>
+                <label className="text-sm font-medium leading-none">Allocate New Resource</label>
                 <div className="mt-2 flex items-end gap-2">
                     <div className="flex-grow">
                         <Select value={resourceToAllocate} onValueChange={setResourceToAllocate}>
