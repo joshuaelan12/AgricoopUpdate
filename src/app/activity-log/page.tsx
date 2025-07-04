@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { db } from '@/lib/firebase';
-import { collection, query, where, limit, orderBy, onSnapshot, Timestamp } from 'firebase/firestore';
+import { collection, query, where, limit, orderBy, onSnapshot } from 'firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
 import {
   Card,
@@ -21,7 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from '@/components/ui/skeleton';
-import { History, FileText } from 'lucide-react';
+import { FileText } from 'lucide-react';
 
 interface ActivityLog {
   id: string;
@@ -35,11 +35,18 @@ export default function ActivityLogPage() {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchLogs = useCallback(() => {
-    if (!user?.companyId) {
-      setLoading(false);
+  useEffect(() => {
+    if (!user) {
+      // Waiting for auth state to resolve
       return;
     }
+
+    if (!user.companyId) {
+      setLoading(false);
+      setLogs([]);
+      return;
+    }
+
     setLoading(true);
     
     const logsRef = collection(db, 'activity_logs');
@@ -54,7 +61,8 @@ export default function ActivityLogPage() {
                 timestamp: data.timestamp?.toDate(),
                 companyId: data.companyId,
             };
-        }).filter(l => l.timestamp) as ActivityLog[];
+        }).filter((l): l is ActivityLog => l.timestamp instanceof Date);
+        
         setLogs(logsData);
         setLoading(false);
     }, (error) => {
@@ -62,17 +70,8 @@ export default function ActivityLogPage() {
         setLoading(false);
     });
 
-    return unsubscribe;
+    return () => unsubscribe();
   }, [user]);
-
-  useEffect(() => {
-    const unsubscribe = fetchLogs();
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
-  }, [fetchLogs]);
 
   if (loading) {
     return <ActivityLogSkeleton />;
