@@ -11,7 +11,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
-import { createProject } from "@/lib/actions/project.actions";
+import { createProject, updateProjectProgress } from "@/lib/actions/project.actions";
 import { CreateProjectInputSchema } from "@/lib/schemas";
 import { useToast } from "@/hooks/use-toast";
 
@@ -50,6 +50,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { Slider } from "@/components/ui/slider";
 
 import { FolderKanban, PlusCircle, Users as UsersIcon, ChevronDown, Loader2 } from "lucide-react";
 
@@ -260,9 +261,12 @@ function CreateProjectDialog({ users, companyId }: CreateProjectDialogProps) {
 // --- MAIN COMPONENT ---
 export default function ProjectsPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<{ [uid: string]: UserData }>({});
   const [loading, setLoading] = useState(true);
+  const [updatingProgressId, setUpdatingProgressId] = useState<string | null>(null);
+
 
   useEffect(() => {
     const fetchProjectData = async () => {
@@ -341,46 +345,79 @@ export default function ProjectsPage() {
 
       {!loading && projects.length > 0 && (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {projects.map((project) => (
-            <Card key={project.id} className="flex flex-col">
-              <CardHeader>
-                <div className="relative h-40 w-full mb-4">
-                    <Image
-                      src={project.imageUrl || "https://placehold.co/600x400.png"}
-                      alt={project.title}
-                      layout="fill"
-                      objectFit="cover"
-                      className="rounded-lg"
-                      data-ai-hint={project.imageHint}
-                    />
-                </div>
-                <div className="flex justify-between items-start">
-                    <CardTitle className="font-headline text-2xl">{project.title}</CardTitle>
-                    <Badge className={`${statusColors[project.status]} text-primary-foreground`}>{project.status}</Badge>
-                </div>
-                <CardDescription>{project.description}</CardDescription>
-              </CardHeader>
-              <CardContent className="flex-grow">
-                <div>
-                  <span className="text-sm font-medium text-muted-foreground">Progress</span>
-                  <Progress value={project.progress} className="mt-1 h-2" />
-                  <span className="text-xs text-muted-foreground">{project.progress}% complete</span>
-                </div>
-              </CardContent>
-              <CardFooter>
-                <div className="flex items-center justify-between w-full">
-                  <span className="text-sm font-medium text-muted-foreground">Team</span>
-                  <div className="flex -space-x-2">
-                    {project.team.map((uid, i) => (
-                      <Avatar key={i} className="h-8 w-8 border-2 border-card">
-                        <AvatarFallback>{getInitials(users[uid]?.displayName)}</AvatarFallback>
-                      </Avatar>
-                    ))}
+          {projects.map((project) => {
+            const canUpdate = user && project.team.includes(user.uid);
+            const isUpdating = updatingProgressId === project.id;
+            return (
+              <Card key={project.id} className="flex flex-col">
+                <CardHeader>
+                  <div className="relative h-40 w-full mb-4">
+                      <Image
+                        src={project.imageUrl || "https://placehold.co/600x400.png"}
+                        alt={project.title}
+                        layout="fill"
+                        objectFit="cover"
+                        className="rounded-lg"
+                        data-ai-hint={project.imageHint}
+                      />
                   </div>
-                </div>
-              </CardFooter>
-            </Card>
-          ))}
+                  <div className="flex justify-between items-start">
+                      <CardTitle className="font-headline text-2xl">{project.title}</CardTitle>
+                      <Badge className={`${statusColors[project.status]} text-primary-foreground`}>{project.status}</Badge>
+                  </div>
+                  <CardDescription>{project.description}</CardDescription>
+                </CardHeader>
+                <CardContent className="flex-grow">
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium text-muted-foreground">Progress</span>
+                      {isUpdating && <Loader2 className="h-4 w-4 animate-spin" />}
+                    </div>
+                    {canUpdate ? (
+                      <Slider
+                        defaultValue={[project.progress]}
+                        max={100}
+                        step={1}
+                        disabled={isUpdating}
+                        onValueCommit={async (value) => {
+                          setUpdatingProgressId(project.id);
+                          const result = await updateProjectProgress({
+                            projectId: project.id,
+                            progress: value[0],
+                          });
+                          if (!result.success) {
+                            toast({
+                              variant: "destructive",
+                              title: "Update Failed",
+                              description: result.error,
+                            });
+                          }
+                          // No toast on success to avoid being noisy. The UI update is feedback enough.
+                          setUpdatingProgressId(null);
+                        }}
+                        className="my-2"
+                      />
+                    ) : (
+                      <Progress value={project.progress} className="mt-1 h-2" />
+                    )}
+                    <span className="text-xs text-muted-foreground">{project.progress}% complete</span>
+                  </div>
+                </CardContent>
+                <CardFooter>
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-sm font-medium text-muted-foreground">Team</span>
+                    <div className="flex -space-x-2">
+                      {project.team.map((uid, i) => (
+                        <Avatar key={i} className="h-8 w-8 border-2 border-card">
+                          <AvatarFallback>{getInitials(users[uid]?.displayName)}</AvatarFallback>
+                        </Avatar>
+                      ))}
+                    </div>
+                  </div>
+                </CardFooter>
+              </Card>
+            )
+          })}
         </div>
       )}
     </div>

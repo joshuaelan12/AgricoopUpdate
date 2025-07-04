@@ -32,8 +32,13 @@ export const CreateProjectInputSchema = z.object({
   team: z.array(z.string()).min(1, "At least one team member is required."),
   companyId: z.string(),
 });
-
 export type CreateProjectInput = z.infer<typeof CreateProjectInputSchema>;
+
+export const UpdateProjectProgressInputSchema = z.object({
+  projectId: z.string(),
+  progress: z.number().min(0).max(100),
+});
+export type UpdateProjectProgressInput = z.infer<typeof UpdateProjectProgressInputSchema>;
 
 
 // --- Resource Schemas ---

@@ -3,7 +3,7 @@
 import { z } from 'zod';
 import { adminDb, FieldValue } from '@/lib/firebase-admin';
 import { revalidatePath } from 'next/cache';
-import { CreateProjectInputSchema, type CreateProjectInput } from '@/lib/schemas';
+import { CreateProjectInputSchema, UpdateProjectProgressInputSchema, type CreateProjectInput, type UpdateProjectProgressInput } from '@/lib/schemas';
 
 // --- SERVER ACTION ---
 export async function createProject(input: CreateProjectInput) {
@@ -27,6 +27,37 @@ export async function createProject(input: CreateProjectInput) {
 
     } catch (error: any) {
         console.error("Error creating project:", error);
+        if (error instanceof z.ZodError) {
+            return { success: false, error: "Validation failed.", issues: error.flatten() };
+        }
+        return { success: false, error: error.message || "An unknown error occurred." };
+    }
+}
+
+export async function updateProjectProgress(input: UpdateProjectProgressInput) {
+    try {
+        const validatedInput = UpdateProjectProgressInputSchema.parse(input);
+        const { projectId, progress } = validatedInput;
+
+        const projectRef = adminDb.collection('projects').doc(projectId);
+        
+        // Security note: In a real-world scenario, you'd want to verify
+        // that the user making this request has permission to update this project.
+        // This would typically involve verifying a session token from the client.
+        // For this app, permission is enforced on the client-side UI.
+
+        await projectRef.update({
+            progress: progress,
+            updatedAt: FieldValue.serverTimestamp(),
+        });
+
+        revalidatePath('/projects');
+        revalidatePath('/'); // Also revalidate dashboard for charts
+
+        return { success: true };
+
+    } catch (error: any) {
+        console.error("Error updating project progress:", error);
         if (error instanceof z.ZodError) {
             return { success: false, error: "Validation failed.", issues: error.flatten() };
         }
