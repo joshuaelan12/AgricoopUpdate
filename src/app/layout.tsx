@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import {
-  Bell,
   Home,
   Leaf,
   ListChecks,
@@ -17,7 +16,6 @@ import {
   Sheet,
 } from 'lucide-react';
 import { SidebarProvider, Sidebar, SidebarTrigger, SidebarInset, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter } from '@/components/ui/sidebar';
-import { Button } from '@/components/ui/button';
 import { Toaster } from "@/components/ui/toaster"
 import UserProfile from '@/components/user-profile';
 import { useAuth } from '@/hooks/use-auth';
@@ -25,6 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import { checkFirebaseConfig } from '@/lib/firebase';
 import FirebaseConfigError from '@/components/firebase-config-error';
 import GlobalSearch from '@/components/global-search';
+import NotificationsPopover from '@/components/notifications-popover';
 
 
 import './globals.css';
@@ -133,10 +132,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
                   <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
                     <SidebarTrigger variant="outline" />
                     <GlobalSearch />
-                    <Button variant="outline" size="icon" className="ml-auto sm:ml-0 h-10 w-10">
-                      <Bell className="h-5 w-5" />
-                      <span className="sr-only">Toggle notifications</span>
-                    </Button>
+                    <NotificationsPopover />
                   </header>
                   <main className="flex-1 p-6">{children}</main>
                 </SidebarInset>
@@ -184,17 +180,6 @@ function AuthAndRoutingController({ children }: { children: React.ReactNode }) {
       router.push('/');
       return;
     }
-
-    // Allow all authenticated users to see Planning page
-    // if (pathname === '/planning' && user.role !== 'Admin' && user.role !== 'Project Manager') {
-    //   toast({
-    //     variant: "destructive",
-    //     title: "Access Denied",
-    //     description: "You do not have permission to view this page.",
-    //   });
-    //   router.push('/');
-    //   return;
-    // }
 
   }, [user, loading, pathname, router, toast]);
 

@@ -31,6 +31,7 @@ import {
     type DeleteProjectOutputInput,
 } from '@/lib/schemas';
 import { logActivity } from './activity.actions';
+import { createNotificationsForTeam } from './notification.actions';
 
 // --- SERVER ACTION ---
 export async function createProject(input: CreateProjectInput, actorName: string) {
@@ -55,6 +56,11 @@ export async function createProject(input: CreateProjectInput, actorName: string
         });
         
         await logActivity(validatedInput.companyId, `${actorName} created a new project: "${validatedInput.title}".`);
+        await createNotificationsForTeam(
+            validatedInput.team,
+            `${actorName} added you to a new project: "${validatedInput.title}".`,
+            '/projects'
+        );
         revalidatePath('/projects');
         
         return { success: true, projectId: newProjectRef.id };
@@ -122,6 +128,12 @@ export async function addProjectComment(input: AddProjectCommentInput) {
         });
 
         await logActivity(projectData.companyId, `${userName} commented on project "${projectData.title}".`);
+        await createNotificationsForTeam(
+            projectData.team,
+            `${userName} commented on project "${projectData.title}".`,
+            '/projects',
+            userId // exclude the person who made the comment
+        );
         revalidatePath('/projects');
 
         return { success: true };
@@ -268,6 +280,11 @@ export async function updateProjectStatus(input: UpdateProjectStatusInput, actor
         });
 
         await logActivity(projectData.companyId, `${actorName} updated the status of project "${projectData.title}" to "${status}".`);
+        await createNotificationsForTeam(
+            projectData.team,
+            `The status of project "${projectData.title}" was updated to "${status}".`,
+            '/projects'
+        );
         revalidatePath('/projects');
         revalidatePath('/'); // Dashboard might show project statuses
 
