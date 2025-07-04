@@ -4,8 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { db } from '@/lib/firebase';
-import { collection, query, where, limit, orderBy, onSnapshot } from 'firebase/firestore';
-import { formatDistanceToNow } from 'date-fns';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import {
   Card,
   CardContent,
@@ -13,12 +12,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableRow,
-} from "@/components/ui/table"
 import { 
   XAxis, 
   YAxis, 
@@ -37,12 +30,6 @@ interface DashboardStats {
   activeMembers: number;
   resourceAlerts: number;
   lowStockItems: string[];
-}
-
-interface ActivityLog {
-  id: string;
-  message: string;
-  timestamp: Date;
 }
 
 type ProjectStatus = "Planning" | "In Progress" | "On Hold" | "Delayed" | "Completed";
@@ -87,7 +74,6 @@ export default function Dashboard() {
     resourceAlerts: 0,
     lowStockItems: [],
   });
-  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [projectsByStatus, setProjectsByStatus] = useState<{ [key: string]: Project[] }>({});
   const [allocationSummary, setAllocationSummary] = useState<{ name: string, allocated: number }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,7 +82,6 @@ export default function Dashboard() {
     if (!user?.companyId) {
       setLoading(false);
       setStats({ totalProjects: 0, activeMembers: 0, resourceAlerts: 0, lowStockItems: [] });
-      setActivityLogs([]);
       setProjectsByStatus({});
       setAllocationSummary([]);
       return;
@@ -111,7 +96,6 @@ export default function Dashboard() {
     const projectsRef = collection(db, 'projects');
     const usersRef = collection(db, 'users');
     const resourcesRef = collection(db, 'resources');
-    const logsRef = collection(db, 'activity_logs');
     
     // --- REAL-TIME LISTENERS ---
     
@@ -184,20 +168,6 @@ export default function Dashboard() {
       }));
     }));
 
-    // Activity Log listener
-    const logsQuery = query(logsRef, where('companyId', '==', companyId), orderBy('timestamp', 'desc'), limit(7));
-    unsubscribes.push(onSnapshot(logsQuery, (snap) => {
-        const logsData = snap.docs.map(doc => {
-            const data = doc.data();
-            return {
-                id: doc.id,
-                message: data.message,
-                timestamp: data.timestamp?.toDate()
-            };
-        }).filter(l => l.timestamp) as ActivityLog[];
-        setActivityLogs(logsData);
-    }));
-
     setLoading(false);
 
     // Cleanup function
@@ -254,36 +224,8 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4">
-          <CardHeader>
-            <CardTitle className="font-headline">Activity Log</CardTitle>
-            <CardDescription>
-              A real-time feed of recent actions in the app.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableBody>
-                {activityLogs.length > 0 ? (
-                  activityLogs.map(log => (
-                    <TableRow key={log.id}>
-                      <TableCell>{log.message}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {formatDistanceToNow(log.timestamp, { addSuffix: true })}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={2} className="text-center h-24">No recent activity.</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-        <Card className="col-span-3">
+      <div className="grid gap-4">
+        <Card>
           <CardHeader>
             <CardTitle className="font-headline">Project Board</CardTitle>
             <CardDescription>Drag to scroll through project statuses.</CardDescription>
@@ -384,24 +326,8 @@ const DashboardSkeleton = () => (
         </Card>
       ))}
     </div>
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-      <Card className="col-span-4">
-        <CardHeader>
-          <Skeleton className="h-6 w-1/3" />
-          <Skeleton className="h-4 w-2/3" />
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="flex justify-between items-center">
-                <Skeleton className="h-4 w-4/5" />
-                <Skeleton className="h-4 w-1/5" />
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-      <Card className="col-span-3">
+    <div className="grid gap-4">
+      <Card>
         <CardHeader>
           <Skeleton className="h-6 w-1/2" />
           <Skeleton className="h-4 w-3/4" />
@@ -409,7 +335,7 @@ const DashboardSkeleton = () => (
         <CardContent className="pl-0 pr-0">
           <div className="overflow-x-auto">
             <div className="flex gap-4 p-4 min-w-max">
-              {[...Array(3)].map((_, i) => (
+              {[...Array(4)].map((_, i) => (
                 <div key={i} className="w-[280px] flex-shrink-0">
                   <div className="flex items-center justify-between p-2">
                     <Skeleton className="h-5 w-20" />

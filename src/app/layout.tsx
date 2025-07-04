@@ -13,6 +13,7 @@ import {
   FolderKanban,
   Users,
   GanttChartSquare,
+  History,
 } from 'lucide-react';
 import { SidebarProvider, Sidebar, SidebarTrigger, SidebarInset, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
@@ -89,6 +90,14 @@ function AppLayout({ children }: { children: React.ReactNode }) {
                                 <Link href="/checklist-builder">
                                     <ListChecks />
                                     <span>Checklist Builder</span>
+                                </Link>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                           <SidebarMenuButton asChild tooltip="Activity Log" isActive={isActive('/activity-log')}>
+                                <Link href="/activity-log">
+                                    <History />
+                                    <span>Activity Log</span>
                                 </Link>
                             </SidebarMenuButton>
                         </SidebarMenuItem>
