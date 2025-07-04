@@ -29,8 +29,8 @@ import {
   Tooltip, 
   Legend, 
   ResponsiveContainer,
-  LineChart,
-  Line,
+  BarChart,
+  Bar,
 } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
@@ -64,18 +64,18 @@ const statusColors: { [key in ProjectStatus]: string } = {
   "Completed": "bg-green-600",
 };
 
+interface AllocatedResource {
+  resourceId: string;
+  name: string;
+  quantity: number;
+}
+
 interface Project {
   id: string;
   title: string;
   status: ProjectStatus;
   progress: number;
-}
-
-
-interface ResourceAllocation {
-    month: string;
-    seeds: number;
-    fertilizer: number;
+  allocatedResources: AllocatedResource[];
 }
 
 interface ResourceData {
@@ -103,7 +103,7 @@ export default function Dashboard() {
   });
   const [recentTasks, setRecentTasks] = useState<RecentTask[]>([]);
   const [projectsByStatus, setProjectsByStatus] = useState<{ [key: string]: Project[] }>({});
-  const [resourceAllocation, setResourceAllocation] = useState<ResourceAllocation[]>([]);
+  const [allocationSummary, setAllocationSummary] = useState<{ name: string, allocated: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -112,7 +112,7 @@ export default function Dashboard() {
       setStats({ totalProjects: 0, activeMembers: 0, resourceAlerts: 0, lowStockItems: [] });
       setRecentTasks([]);
       setProjectsByStatus({});
-      setResourceAllocation([]);
+      setAllocationSummary([]);
       return;
     }
 
@@ -126,11 +126,10 @@ export default function Dashboard() {
     const usersRef = collection(db, 'users');
     const resourcesRef = collection(db, 'resources');
     const tasksRef = collection(db, 'tasks');
-    const resourceUsageRef = collection(db, 'resourceUsage');
     
     // --- REAL-TIME LISTENERS ---
     
-    // Projects listener (for stats and project board)
+    // Projects listener (for stats, project board, and allocation summary)
     const projectsQuery = query(projectsRef, where('companyId', '==', companyId));
     unsubscribes.push(onSnapshot(projectsQuery, (snap) => {
         setStats(prev => ({ ...prev, totalProjects: snap.size }));
@@ -147,8 +146,25 @@ export default function Dashboard() {
             acc[status].push(project);
             return acc;
         }, {} as { [key: string]: Project[] });
-
         setProjectsByStatus(groupedByStatus);
+
+        // Calculate Resource Allocation Summary
+        const summary: { [name: string]: number } = {};
+        allProjects.forEach(project => {
+            if (project.allocatedResources && Array.isArray(project.allocatedResources)) {
+                project.allocatedResources.forEach(resource => {
+                    if (summary[resource.name]) {
+                        summary[resource.name] += resource.quantity;
+                    } else {
+                        summary[resource.name] = resource.quantity;
+                    }
+                });
+            }
+        });
+        const summaryArray = Object.entries(summary)
+            .map(([name, allocated]) => ({ name, allocated }))
+            .sort((a, b) => b.allocated - a.allocated);
+        setAllocationSummary(summaryArray);
     }));
     
     // Members listener (for stats)
@@ -194,12 +210,6 @@ export default function Dashboard() {
             };
         }).filter(t => t.updatedAt) as RecentTask[];
       setRecentTasks(tasksData);
-    }));
-
-    // Resource allocation listener
-    const resourceAllocationQuery = query(resourceUsageRef, where('companyId', '==', companyId), orderBy('monthIndex', 'asc'), limit(6));
-    unsubscribes.push(onSnapshot(resourceAllocationQuery, (snap) => {
-      setResourceAllocation(snap.docs.map(doc => doc.data() as ResourceAllocation));
     }));
 
     setLoading(false);
@@ -346,28 +356,39 @@ export default function Dashboard() {
       </div>
        <Card>
           <CardHeader>
-            <CardTitle className="font-headline">Resource Allocation</CardTitle>
-            <CardDescription>Monthly usage of key resources.</CardDescription>
+            <CardTitle className="font-headline">Resource Allocation Summary</CardTitle>
+            <CardDescription>Total quantity of resources allocated across all projects.</CardDescription>
           </CardHeader>
           <CardContent>
-            {resourceAllocation.length > 0 ? (
+            {allocationSummary.length > 0 ? (
                 <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={resourceAllocation} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
+                  <BarChart data={allocationSummary} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false}/>
-                    <Tooltip 
-                    contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))" }}
-                    labelStyle={{ color: "hsl(var(--foreground))" }}
+                    <XAxis 
+                      dataKey="name" 
+                      stroke="hsl(var(--muted-foreground))" 
+                      fontSize={12} 
+                      tickLine={false} 
+                      axisLine={false}
                     />
-                    <Legend wrapperStyle={{fontSize: "14px"}}/>
-                    <Line type="monotone" dataKey="seeds" stroke="hsl(var(--primary))" strokeWidth={2} name="Seeds (kg)" />
-                    <Line type="monotone" dataKey="fertilizer" stroke="hsl(var(--accent))" strokeWidth={2} name="Fertilizer (kg)" />
-                </LineChart>
+                    <YAxis 
+                      stroke="hsl(var(--muted-foreground))" 
+                      fontSize={12} 
+                      tickLine={false} 
+                      axisLine={false}
+                      label={{ value: 'Quantity (kg)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' }, dy: 40 }}
+                    />
+                    <Tooltip 
+                      contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))" }}
+                      labelStyle={{ color: "hsl(var(--foreground))" }}
+                      cursor={{fill: 'hsl(var(--muted))'}}
+                    />
+                    <Bar dataKey="allocated" fill="hsl(var(--primary))" name="Allocated (kg)" radius={[4, 4, 0, 0]} />
+                  </BarChart>
                 </ResponsiveContainer>
             ) : (
                 <div className="flex justify-center items-center h-[300px] text-muted-foreground">
-                    No resource usage data available to display chart.
+                    No resources are currently allocated to projects.
                 </div>
             )}
           </CardContent>
