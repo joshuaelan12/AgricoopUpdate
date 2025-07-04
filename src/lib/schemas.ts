@@ -34,3 +34,16 @@ export const CreateProjectInputSchema = z.object({
 });
 
 export type CreateProjectInput = z.infer<typeof CreateProjectInputSchema>;
+
+
+// --- Resource Schemas ---
+
+export const CreateResourceInputSchema = z.object({
+  name: z.string().min(1, "Resource name is required."),
+  category: z.enum(["Inputs", "Equipment", "Infrastructure", "Finance"]),
+  quantity: z.string().min(1, "Quantity or value is required."),
+  status: z.enum(["In Stock", "Good", "In Use", "On Track", "Low Stock", "Needs Maintenance"]),
+  companyId: z.string(),
+});
+
+export type CreateResourceInput = z.infer<typeof CreateResourceInputSchema>;

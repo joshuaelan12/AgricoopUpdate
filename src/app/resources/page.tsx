@@ -1,13 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { useRouter } from 'next/navigation';
+
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
+} from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -15,13 +20,38 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Package, Tractor, Droplets, DollarSign, Warehouse } from "lucide-react"
+import { Package, Tractor, Droplets, DollarSign, Warehouse, PlusCircle, Loader2 } from "lucide-react";
 import { useAuth } from '@/hooks/use-auth';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogClose
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { createResource } from '@/lib/actions/resource.actions';
+import { CreateResourceInputSchema } from '@/lib/schemas';
+
 
 // --- DATA INTERFACE ---
 interface Resource {
@@ -32,13 +62,10 @@ interface Resource {
     status: string;
 }
 
+// --- CONSTANTS & HELPERS ---
 const statusBadgeVariant: { [key: string]: "default" | "secondary" | "destructive" | "outline" } = {
-  "In Stock": "default",
-  "Good": "default",
-  "In Use": "default",
-  "On Track": "default",
-  "Low Stock": "destructive",
-  "Needs Maintenance": "destructive",
+  "In Stock": "default", "Good": "default", "In Use": "default", "On Track": "default",
+  "Low Stock": "destructive", "Needs Maintenance": "destructive",
 };
 
 const categoryIcons: { [key: string]: React.ReactNode } = {
@@ -46,9 +73,126 @@ const categoryIcons: { [key: string]: React.ReactNode } = {
   "Equipment": <Tractor className="h-4 w-4 text-muted-foreground" />,
   "Infrastructure": <Droplets className="h-4 w-4 text-muted-foreground" />,
   "Finance": <DollarSign className="h-4 w-4 text-muted-foreground" />,
+};
+
+const resourceCategories = ["Inputs", "Equipment", "Infrastructure", "Finance"];
+const resourceStatuses = ["In Stock", "Good", "In Use", "On Track", "Low Stock", "Needs Maintenance"];
+
+
+// --- ADD RESOURCE DIALOG ---
+function AddResourceDialog({ companyId }: { companyId: string }) {
+  const [open, setOpen] = useState(false);
+  const router = useRouter();
+  const { toast } = useToast();
+
+  const form = useForm<z.infer<typeof CreateResourceInputSchema>>({
+    resolver: zodResolver(CreateResourceInputSchema),
+    defaultValues: {
+      name: "",
+      category: "Inputs",
+      quantity: "",
+      status: "In Stock",
+      companyId: companyId,
+    },
+  });
+
+  const onSubmit = async (values: z.infer<typeof CreateResourceInputSchema>) => {
+    const result = await createResource(values);
+    if (result.success) {
+      toast({
+        title: "Resource Added",
+        description: `"${values.name}" has been successfully added to your inventory.`,
+      });
+      form.reset({
+        ...form.getValues(),
+        name: "",
+        quantity: "",
+        companyId: companyId
+      });
+      setOpen(false);
+      router.refresh(); 
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Addition Failed",
+        description: result.error || "An unexpected error occurred.",
+      });
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button>
+          <PlusCircle className="mr-2 h-4 w-4" />
+          Add Resource
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle className="font-headline text-2xl">Add New Resource</DialogTitle>
+          <DialogDescription>
+            Fill in the details to add a new resource to your inventory.
+          </DialogDescription>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField control={form.control} name="name" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Resource Name</FormLabel>
+                <FormControl><Input placeholder="e.g., Organic Fertilizer" {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )}/>
+            <FormField control={form.control} name="quantity" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Quantity / Value</FormLabel>
+                <FormControl><Input placeholder="e.g., 50 kg or $5000" {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )}/>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField control={form.control} name="category" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Category</FormLabel>
+                   <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      {resourceCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}/>
+              <FormField control={form.control} name="status" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Status</FormLabel>
+                   <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      {resourceStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}/>
+            </div>
+            <DialogFooter>
+               <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
+              <Button type="submit" disabled={form.formState.isSubmitting}>
+                 {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Add Resource
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 
+// --- MAIN COMPONENT ---
 export default function ResourcesPage() {
   const { user } = useAuth();
   const [resources, setResources] = useState<Resource[]>([]);
@@ -75,7 +219,6 @@ export default function ResourcesPage() {
         setResources(resourcesData);
       } catch (error) {
         console.error("Error fetching resources:", error);
-        // If collection doesn't exist or another error occurs, show an empty list
         setResources([]);
       } finally {
         setLoading(false);
@@ -89,14 +232,18 @@ export default function ResourcesPage() {
     return <ResourcesSkeleton />;
   }
 
-
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-4xl font-headline text-foreground">Resource Management</h1>
-        <p className="text-muted-foreground">
-          Track and manage your cooperative's assets.
-        </p>
+       <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-4xl font-headline text-foreground">Resource Management</h1>
+          <p className="text-muted-foreground">
+            Track and manage your cooperative's assets.
+          </p>
+        </div>
+        {user && (user.role === 'Admin' || user.role === 'Project Manager') && (
+            <AddResourceDialog companyId={user.companyId} />
+        )}
       </div>
       <Card>
         <CardHeader>
@@ -139,7 +286,7 @@ export default function ResourcesPage() {
               <Warehouse className="h-16 w-16 text-muted-foreground mb-4" />
               <h2 className="text-2xl font-headline">No Resources Found</h2>
               <p className="text-muted-foreground">
-                Your inventory is empty. Add resources to see them here.
+                Your inventory is empty. Click "Add Resource" to get started.
               </p>
             </div>
           )}
