@@ -15,15 +15,17 @@ export interface AuthUser extends User {
 export function useAuth() {
     const [user, setUser] = useState<AuthUser | null>(null);
     const [loading, setLoading] = useState(true);
-
-    // If Firebase isn't configured, `auth` will be null.
-    // Throw an error on the client-side to be caught by the error boundary,
-    // which will then display a helpful setup guide.
-    if (!auth) {
-        throw new Error('Firebase: Error (auth/invalid-api-key).');
-    }
+    // Directly check if the auth object from firebase.ts is available.
+    // If it's null, Firebase is not configured.
+    const isConfigured = !!auth;
 
     useEffect(() => {
+        // If not configured, don't proceed with auth state listening.
+        if (!isConfigured) {
+            setLoading(false);
+            return;
+        }
+
         const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
             if (authUser && db) {
                 const userDocRef = doc(db, "users", authUser.uid);
@@ -55,7 +57,7 @@ export function useAuth() {
         });
 
         return () => unsubscribe();
-    }, []);
+    }, [isConfigured]); // Rerun if isConfigured changes (it won't, but it's a dependency)
 
-    return { user, loading };
+    return { user, loading, isConfigured };
 }

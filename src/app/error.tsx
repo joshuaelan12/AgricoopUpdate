@@ -4,7 +4,6 @@ import { useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { AlertTriangle } from 'lucide-react'
-import FirebaseConfigError from '@/components/firebase-config-error'
 
 export default function Error({
   error,
@@ -18,16 +17,8 @@ export default function Error({
     console.error(error)
   }, [error])
 
-  // Check for the specific Firebase client-side config error.
-  // This error is thrown by Firebase when trying to use its services with an
-  // invalid or missing API key, which happens when env variables are not set.
-  const isFirebaseConfigError = error.message.includes('auth/invalid-api-key');
-  
-  if (isFirebaseConfigError) {
-    return <FirebaseConfigError onTryAgain={reset} />
-  }
-
-  // Generic fallback error
+  // Generic fallback error.
+  // The specific Firebase config error is now handled directly in the layout.
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
         <Card className="mx-auto max-w-lg w-full text-center">

@@ -22,6 +22,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useToast } from "@/hooks/use-toast";
 import GlobalSearch from '@/components/global-search';
 import NotificationsPopover from '@/components/notifications-popover';
+import FirebaseConfigError from '@/components/firebase-config-error';
 
 
 import './globals.css';
@@ -140,10 +141,15 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 }
 
 function AuthAndRoutingController({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, isConfigured } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
+
+  // If Firebase is not configured, show the setup guide immediately.
+  if (!isConfigured) {
+    return <FirebaseConfigError />;
+  }
 
   useEffect(() => {
     if (loading) return;
@@ -209,10 +215,6 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // The app will now throw an error if Firebase is not configured.
-  // The error is caught by the `error.tsx` boundary which displays a helpful guide.
-  // No need to explicitly call a check function here.
-
   return (
     <html lang="en">
       <head>
