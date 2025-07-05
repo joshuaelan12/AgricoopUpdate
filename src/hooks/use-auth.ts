@@ -16,14 +16,14 @@ export function useAuth() {
     const [user, setUser] = useState<AuthUser | null>(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        // If Firebase isn't configured, auth will be undefined.
-        // Prevent onAuthStateChanged from throwing an error.
-        if (!auth) {
-            setLoading(false);
-            return;
-        }
+    // If Firebase isn't configured, `auth` will be null.
+    // Throw an error on the client-side to be caught by the error boundary,
+    // which will then display a helpful setup guide.
+    if (!auth) {
+        throw new Error('Firebase: Error (auth/invalid-api-key).');
+    }
 
+    useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
             if (authUser && db) {
                 const userDocRef = doc(db, "users", authUser.uid);

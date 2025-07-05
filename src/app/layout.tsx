@@ -20,8 +20,6 @@ import { Toaster } from "@/components/ui/toaster"
 import UserProfile from '@/components/user-profile';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from "@/hooks/use-toast";
-import { checkFirebaseConfig } from '@/lib/firebase';
-import FirebaseConfigError from '@/components/firebase-config-error';
 import GlobalSearch from '@/components/global-search';
 import NotificationsPopover from '@/components/notifications-popover';
 
@@ -211,9 +209,9 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // With a hardcoded Firebase config, the elaborate check is no longer needed here.
-  // The check function is kept for compatibility but doesn't need to be called in a try/catch.
-  checkFirebaseConfig();
+  // The app will now throw an error if Firebase is not configured.
+  // The error is caught by the `error.tsx` boundary which displays a helpful guide.
+  // No need to explicitly call a check function here.
 
   return (
     <html lang="en">
