@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Download } from 'lucide-react';
+import generatePdf from '@/lib/pdf-generator';
 
 // --- Data Interfaces ---
 interface Project {
@@ -129,7 +130,7 @@ export default function ReportsPage() {
     }
   }, [authLoading, fetchData]);
 
-  const handleDownloadProjects = () => {
+  const handleDownloadProjectsCsv = () => {
     const data = projects.map(p => ({
         Project_ID: p.id,
         Title: p.title,
@@ -140,7 +141,19 @@ export default function ReportsPage() {
     downloadCsv(data, 'project_summary_report.csv');
   };
 
-  const handleDownloadResources = () => {
+   const handleDownloadProjectsPdf = () => {
+    const head = [['Project ID', 'Title', 'Status', 'Progress (%)', 'Team Size']];
+    const body = projects.map(p => [
+      p.id,
+      p.title,
+      p.status,
+      `${p.progress}%`,
+      p.team.length,
+    ]);
+    generatePdf('Project Summary Report', head, body);
+  };
+
+  const handleDownloadResourcesCsv = () => {
      const data = resources.map(r => ({
         Resource_ID: r.id,
         Name: r.name,
@@ -150,8 +163,14 @@ export default function ReportsPage() {
     }));
     downloadCsv(data, 'resource_inventory_report.csv');
   };
+
+  const handleDownloadResourcesPdf = () => {
+    const head = [['Resource ID', 'Name', 'Category', 'Quantity (kg)', 'Status']];
+    const body = resources.map(r => [r.id, r.name, r.category, r.quantity, r.status]);
+    generatePdf('Resource Inventory Report', head, body);
+  };
   
-  const handleDownloadMembers = () => {
+  const handleDownloadMembersCsv = () => {
     const data = members.map(m => ({
         Member_ID: m.uid,
         Name: m.displayName,
@@ -161,7 +180,13 @@ export default function ReportsPage() {
     downloadCsv(data, 'team_roster_report.csv');
   };
 
-  const handleDownloadOutputs = () => {
+  const handleDownloadMembersPdf = () => {
+    const head = [['Member ID', 'Name', 'Email', 'Role']];
+    const body = members.map(m => [m.uid, m.displayName, m.email, m.role]);
+    generatePdf('Team Roster Report', head, body);
+  };
+
+  const handleDownloadOutputsCsv = () => {
     const data = projects.flatMap(p => 
         (p.outputs || []).map(o => ({
             Project_ID: p.id,
@@ -175,6 +200,20 @@ export default function ReportsPage() {
      downloadCsv(data, 'project_outputs_report.csv');
   };
 
+  const handleDownloadOutputsPdf = () => {
+    const head = [['Project', 'Date', 'Description', 'Quantity', 'Unit']];
+    const body = projects.flatMap(p =>
+      (p.outputs || []).map(o => [
+        p.title,
+        o.date,
+        o.description,
+        o.quantity,
+        o.unit,
+      ])
+    );
+    generatePdf('Project Outputs Report', head, body);
+  };
+
   if (loading || authLoading) {
     return <ReportsSkeleton />;
   }
@@ -184,7 +223,7 @@ export default function ReportsPage() {
       <div className="mb-8">
         <h1 className="text-4xl font-headline text-foreground">Generate Reports</h1>
         <p className="text-muted-foreground">
-          Download CSV reports for projects, resources, and more.
+          Download CSV or PDF reports for projects, resources, and more.
         </p>
       </div>
 
@@ -195,10 +234,16 @@ export default function ReportsPage() {
             <CardDescription>A summary of all projects, including status, progress, and team size.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={handleDownloadProjects} disabled={projects.length === 0}>
-              <Download className="mr-2 h-4 w-4" />
-              Download CSV
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={handleDownloadProjectsCsv} disabled={projects.length === 0}>
+                <Download className="mr-2 h-4 w-4" />
+                Download CSV
+              </Button>
+              <Button onClick={handleDownloadProjectsPdf} disabled={projects.length === 0} variant="outline">
+                <Download className="mr-2 h-4 w-4" />
+                Download PDF
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -208,10 +253,16 @@ export default function ReportsPage() {
             <CardDescription>A complete list of all resources, their category, quantity, and status.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={handleDownloadResources} disabled={resources.length === 0}>
-              <Download className="mr-2 h-4 w-4" />
-              Download CSV
-            </Button>
+             <div className="flex flex-wrap gap-2">
+                <Button onClick={handleDownloadResourcesCsv} disabled={resources.length === 0}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Download CSV
+                </Button>
+                <Button onClick={handleDownloadResourcesPdf} disabled={resources.length === 0} variant="outline">
+                  <Download className="mr-2 h-4 w-4" />
+                  Download PDF
+                </Button>
+             </div>
           </CardContent>
         </Card>
 
@@ -221,10 +272,16 @@ export default function ReportsPage() {
             <CardDescription>A list of all team members in your company, including their role and email.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={handleDownloadMembers} disabled={members.length === 0}>
-              <Download className="mr-2 h-4 w-4" />
-              Download CSV
-            </Button>
+             <div className="flex flex-wrap gap-2">
+                <Button onClick={handleDownloadMembersCsv} disabled={members.length === 0}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Download CSV
+                </Button>
+                 <Button onClick={handleDownloadMembersPdf} disabled={members.length === 0} variant="outline">
+                  <Download className="mr-2 h-4 w-4" />
+                  Download PDF
+                </Button>
+             </div>
           </CardContent>
         </Card>
         
@@ -234,10 +291,16 @@ export default function ReportsPage() {
             <CardDescription>A detailed log of all production outputs recorded for every project.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={handleDownloadOutputs} disabled={projects.flatMap(p => p.outputs || []).length === 0}>
-              <Download className="mr-2 h-4 w-4" />
-              Download CSV
-            </Button>
+             <div className="flex flex-wrap gap-2">
+                <Button onClick={handleDownloadOutputsCsv} disabled={projects.flatMap(p => p.outputs || []).length === 0}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Download CSV
+                </Button>
+                <Button onClick={handleDownloadOutputsPdf} disabled={projects.flatMap(p => p.outputs || []).length === 0} variant="outline">
+                  <Download className="mr-2 h-4 w-4" />
+                  Download PDF
+                </Button>
+             </div>
           </CardContent>
         </Card>
       </div>
@@ -259,7 +322,10 @@ const ReportsSkeleton = () => (
                         <Skeleton className="h-4 w-full mt-2" />
                     </CardHeader>
                     <CardContent>
-                        <Skeleton className="h-10 w-36" />
+                        <div className="flex gap-2">
+                            <Skeleton className="h-10 w-36" />
+                            <Skeleton className="h-10 w-36" />
+                        </div>
                     </CardContent>
                 </Card>
             ))}
