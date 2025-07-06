@@ -6,19 +6,11 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { suggestChecklist } from "@/ai/flows/checklist-suggestions"
 import { SuggestChecklistInputSchema, type SuggestChecklistInput, type SuggestChecklistOutput } from "@/lib/schemas"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, Wand2, CheckSquare } from "lucide-react"
-
-const issueTypes = [
-  { value: "pest infestation", label: "Pest Infestation" },
-  { value: "equipment malfunction", label: "Equipment Malfunction" },
-  { value: "irrigation problem", label: "Irrigation Problem" },
-  { value: "soil degradation", label: "Soil Degradation" },
-  { value: "other", label: "Other Issue" },
-]
 
 export default function ChecklistBuilderClient() {
   const [suggestions, setSuggestions] = useState<SuggestChecklistOutput | null>(null)
@@ -27,6 +19,9 @@ export default function ChecklistBuilderClient() {
 
   const form = useForm<SuggestChecklistInput>({
     resolver: zodResolver(SuggestChecklistInputSchema),
+    defaultValues: {
+      issueDescription: "",
+    },
   })
 
   const onSubmit: SubmitHandler<SuggestChecklistInput> = async (data) => {
@@ -54,29 +49,23 @@ export default function ChecklistBuilderClient() {
           <form onSubmit={form.handleSubmit(onSubmit)}>
             <CardHeader>
               <CardTitle className="font-headline text-2xl">Describe the Issue</CardTitle>
-              <CardDescription>Select the type of issue you are facing to get a suggested checklist.</CardDescription>
+              <CardDescription>Describe the problem you are facing in detail, and our AI will generate a suggested action plan.</CardDescription>
             </CardHeader>
             <CardContent>
               <FormField
                 control={form.control}
-                name="issueType"
+                name="issueDescription"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Issue Type</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select an issue type..." />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {issueTypes.map((type) => (
-                           <SelectItem key={type.value} value={type.value}>
-                             {type.label}
-                           </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormLabel>Issue Description</FormLabel>
+                    <FormControl>
+                        <Textarea
+                            placeholder="e.g., 'Half of the corn stalks in the north field are yellowing and stunted, and I've noticed small white flies on the underside of the leaves.'"
+                            className="resize-none"
+                            rows={4}
+                            {...field}
+                        />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -111,7 +100,7 @@ export default function ChecklistBuilderClient() {
                     <Loader2 className="h-5 w-5 animate-spin" />
                     <span>Analyzing issue and generating checklist...</span>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 pt-4">
                     <div className="h-6 bg-muted rounded-md animate-pulse w-3/4"></div>
                     <div className="h-6 bg-muted rounded-md animate-pulse w-1/2"></div>
                     <div className="h-6 bg-muted rounded-md animate-pulse w-5/6"></div>
@@ -125,7 +114,7 @@ export default function ChecklistBuilderClient() {
           <CardHeader>
             <CardTitle className="font-headline text-2xl">Suggested Action Plan</CardTitle>
             <CardDescription>
-              Here are the recommended steps to address the selected issue.
+              Here are the AI-recommended steps to address the issue you described.
             </CardDescription>
           </CardHeader>
           <CardContent>

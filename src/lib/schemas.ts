@@ -148,9 +148,9 @@ export type SignUpUserOutput = z.infer<typeof SignUpUserOutputSchema>;
 
 // --- AI Checklist Schemas ---
 export const SuggestChecklistInputSchema = z.object({
-  issueType: z.string({
-    required_error: "Please select an issue type.",
-  }).describe('The type of issue reported (e.g., pest infestation, equipment malfunction).'),
+  issueDescription: z.string().min(10, {
+    message: "Please describe the issue in at least 10 characters.",
+  }).describe('A description of the issue that needs a checklist.'),
 });
 export type SuggestChecklistInput = z.infer<typeof SuggestChecklistInputSchema>;
 
