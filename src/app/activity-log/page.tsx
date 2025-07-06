@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { db } from '@/lib/firebase';
-import { collection, query, where, limit, orderBy, onSnapshot, Timestamp } from 'firebase/firestore';
+import { collection, query, where, limit, onSnapshot, Timestamp } from 'firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
 import {
   Card,
@@ -36,25 +36,24 @@ export default function ActivityLogPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Don't do anything until authentication is resolved.
     if (authLoading) {
       return;
     }
 
-    // If no user or companyId, we are done. Show empty state.
     if (!user || !user.companyId) {
       setLoading(false);
       setLogs([]);
       return;
     }
 
-    // At this point, we have a user and companyId, so set up the listener.
     const logsRef = collection(db, 'activity_logs');
+    // A query that filters by one field and orders by another requires a composite index.
+    // To make this more robust and avoid needing a manual index creation step in Firestore,
+    // we will fetch a larger batch of recent logs and perform the sorting on the client.
     const logsQuery = query(
       logsRef, 
       where('companyId', '==', user.companyId), 
-      orderBy('timestamp', 'desc'), 
-      limit(50)
+      limit(100) // Fetch a larger batch to sort from
     );
     
     const unsubscribe = onSnapshot(logsQuery, (querySnapshot) => {
@@ -64,14 +63,16 @@ export default function ActivityLogPage() {
             return {
                 id: doc.id,
                 message: data.message,
-                // Handle pending server timestamps by providing a fallback client-side date.
-                // This ensures new activities appear instantly.
                 timestamp: timestamp ? timestamp.toDate() : new Date(),
                 companyId: data.companyId,
             };
         });
         
-        setLogs(logsData);
+        // Sort client-side to ensure descending chronological order.
+        logsData.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+        // Now take the most recent 50 to display.
+        setLogs(logsData.slice(0, 50));
         setLoading(false);
     }, (error) => {
         console.error("Error fetching activity logs:", error);
@@ -79,7 +80,6 @@ export default function ActivityLogPage() {
         setLogs([]);
     });
 
-    // Cleanup subscription on unmount
     return () => unsubscribe();
   }, [user, authLoading]);
 
