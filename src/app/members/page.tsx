@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import {
   Card,
   CardContent,
@@ -19,10 +20,11 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { Users } from 'lucide-react';
+import { Users, PlusCircle } from 'lucide-react';
 
 // --- DATA INTERFACE ---
 interface Member {
@@ -90,11 +92,21 @@ export default function MembersPage() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-4xl font-headline text-foreground">Members</h1>
-        <p className="text-muted-foreground">
-          View and manage all members of your cooperative.
-        </p>
+      <div className="flex justify-between items-center mb-8">
+        <div>
+            <h1 className="text-4xl font-headline text-foreground">Members</h1>
+            <p className="text-muted-foreground">
+              View and manage all members of your cooperative.
+            </p>
+        </div>
+        {user?.role === 'Admin' && (
+            <Link href="/admin/create-user">
+                <Button>
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Create Member
+                </Button>
+            </Link>
+        )}
       </div>
       <Card>
         <CardHeader>
