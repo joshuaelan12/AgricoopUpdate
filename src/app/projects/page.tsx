@@ -608,7 +608,7 @@ export default function ProjectsPage() {
             const displayProgress = liveProgress[project.id] ?? project.progress;
 
             return (
-              <Card key={project.id} className="flex flex-col">
+              <Card key={project.id} id={project.id} className="flex flex-col scroll-mt-24">
                 <CardHeader>
                   <div className="flex justify-between items-start gap-4">
                       <div className="flex-1">

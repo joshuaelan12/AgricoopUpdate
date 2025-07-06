@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
 import { db } from '@/lib/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
@@ -230,7 +231,7 @@ export default function Dashboard() {
           <Card className="h-full">
             <CardHeader>
               <CardTitle className="font-headline">Project Board</CardTitle>
-              <CardDescription>Drag to scroll through project statuses.</CardDescription>
+              <CardDescription>Drag to scroll through project statuses. Click a project to view details.</CardDescription>
             </CardHeader>
             <CardContent className="pl-0 pr-0">
               <div className="overflow-x-auto">
@@ -248,13 +249,15 @@ export default function Dashboard() {
                           </div>
                           <div className="space-y-2 p-2 rounded-b-lg bg-muted/50 h-full min-h-[200px] max-h-[400px] overflow-y-auto">
                               {(projectsByStatus[status] || []).map(project => (
-                                  <Card key={project.id} className="p-3 bg-card hover:bg-card/90 cursor-pointer">
-                                      <p className="font-medium text-sm text-card-foreground">{project.title}</p>
-                                      <div className="flex items-center justify-between mt-2">
-                                          <span className="text-xs text-muted-foreground">{project.progress}% complete</span>
-                                      </div>
-                                      <Progress value={project.progress} className="mt-2 h-1.5" />
-                                  </Card>
+                                  <Link href={`/projects#${project.id}`} key={project.id} className="block">
+                                      <Card className="p-3 bg-card hover:bg-card/90 transition-all hover:shadow-md cursor-pointer">
+                                          <p className="font-medium text-sm text-card-foreground">{project.title}</p>
+                                          <div className="flex items-center justify-between mt-2">
+                                              <span className="text-xs text-muted-foreground">{project.progress}% complete</span>
+                                          </div>
+                                          <Progress value={project.progress} className="mt-2 h-1.5" />
+                                      </Card>
+                                  </Link>
                               ))}
                               {(!projectsByStatus[status] || projectsByStatus[status].length === 0) && (
                                   <div className="text-center text-sm text-muted-foreground pt-10">
