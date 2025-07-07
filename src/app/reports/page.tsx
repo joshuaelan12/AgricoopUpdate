@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -132,7 +133,6 @@ export default function ReportsPage() {
 
   const handleDownloadProjectsCsv = () => {
     const data = projects.map(p => ({
-        Project_ID: p.id,
         Title: p.title,
         Status: p.status,
         Progress_Percent: p.progress,
@@ -142,9 +142,8 @@ export default function ReportsPage() {
   };
 
    const handleDownloadProjectsPdf = () => {
-    const head = [['Project ID', 'Title', 'Status', 'Progress (%)', 'Team Size']];
+    const head = [['Title', 'Status', 'Progress (%)', 'Team Size']];
     const body = projects.map(p => [
-      p.id,
       p.title,
       p.status,
       `${p.progress}%`,
@@ -155,24 +154,22 @@ export default function ReportsPage() {
 
   const handleDownloadResourcesCsv = () => {
      const data = resources.map(r => ({
-        Resource_ID: r.id,
         Name: r.name,
         Category: r.category,
-        Quantity_kg: r.quantity,
-        Status: r.status,
+        Quantity: r.quantity,
+        Unit: r.status,
     }));
     downloadCsv(data, 'resource_inventory_report.csv');
   };
 
   const handleDownloadResourcesPdf = () => {
-    const head = [['Resource ID', 'Name', 'Category', 'Quantity (kg)', 'Status']];
-    const body = resources.map(r => [r.id, r.name, r.category, r.quantity, r.status]);
+    const head = [['Name', 'Category', 'Quantity', 'Unit', 'Status']];
+    const body = resources.map(r => [r.name, r.category, r.quantity, r.status]);
     generatePdf('Resource Inventory Report', head, body);
   };
   
   const handleDownloadMembersCsv = () => {
     const data = members.map(m => ({
-        Member_ID: m.uid,
         Name: m.displayName,
         Email: m.email,
         Role: m.role,
@@ -181,15 +178,14 @@ export default function ReportsPage() {
   };
 
   const handleDownloadMembersPdf = () => {
-    const head = [['Member ID', 'Name', 'Email', 'Role']];
-    const body = members.map(m => [m.uid, m.displayName, m.email, m.role]);
+    const head = [['Name', 'Email', 'Role']];
+    const body = members.map(m => [m.displayName, m.email, m.role]);
     generatePdf('Team Roster Report', head, body);
   };
 
   const handleDownloadOutputsCsv = () => {
     const data = projects.flatMap(p => 
         (p.outputs || []).map(o => ({
-            Project_ID: p.id,
             Project_Title: p.title,
             Output_Date: o.date,
             Output_Description: o.description,
