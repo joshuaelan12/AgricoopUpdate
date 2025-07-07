@@ -256,8 +256,8 @@ function AddOrEditTaskDialog({ mode, project, task, users, actor, onActionComple
 
   const onSubmit = async (values: FormSchemaType) => {
     const result = isEdit 
-      ? await updateTask(values as UpdateTaskInput, actor.displayName) 
-      : await addTaskToProject(values as AddTaskInput, actor.displayName);
+      ? await updateTask(values as UpdateTaskInput, actor) 
+      : await addTaskToProject(values as AddTaskInput, actor);
       
     if (result.success) {
       toast({ title: `Task ${isEdit ? 'Updated' : 'Added'}` });
@@ -587,7 +587,7 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
   const isManager = currentUser.role === 'Admin' || currentUser.role === 'Project Manager';
 
   const handleTaskStatusChange = async (taskId: string, newStatus: Task['status']) => {
-    const result = await updateTask({ projectId: project.id, taskId, status: newStatus }, currentUser.displayName);
+    const result = await updateTask({ projectId: project.id, taskId, status: newStatus }, currentUser);
     if (result.success) {
       toast({ title: "Task Status Updated" });
       onActionComplete();
