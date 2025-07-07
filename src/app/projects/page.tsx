@@ -969,21 +969,46 @@ export default function ProjectsPage() {
 
         const projectsData = projectsSnap.docs.map(doc => {
             const data = doc.data();
-            const deadline = data.deadline?.toDate() ?? null;
-            
-            const comments = (data.comments || []).map((comment: any) => ({ ...comment, createdAt: comment.createdAt?.toDate() ?? null })).filter((c: any): c is Comment => c.createdAt);
-            
-            const files = (data.files || []).map((file: any) => ({ ...file, uploadedAt: file.uploadedAt?.toDate() ?? null })).filter((f: any): f is ProjectFile => f.uploadedAt);
-            
-            const tasks = (data.tasks || []).map((task: any) => {
-                const taskDeadline = task.deadline?.toDate() ?? null;
-                const taskFiles = (task.files || []).map((f: any) => ({ ...f, uploadedAt: f.uploadedAt?.toDate() ?? null })).filter((f: any): f is ProjectFile => f.uploadedAt);
-                return { ...task, deadline: taskDeadline, files: taskFiles };
-            }).filter((t: Task) => t.id);
 
-            const allocatedResources = data.allocatedResources || [];
+            // Helper to safely convert Firestore Timestamps to JS Dates
+            const toDate = (timestamp: any): Date | null => {
+                return timestamp?.toDate ? timestamp.toDate() : null;
+            };
+
+            // Helper for required dates, providing a fallback to prevent crashes
+            const toDateRequired = (timestamp: any): Date => {
+                return timestamp?.toDate ? timestamp.toDate() : new Date(); 
+            };
             
-            return { id: doc.id, ...data, deadline, comments, tasks, files, allocatedResources } as Project;
+            const comments: Comment[] = (data.comments || []).map((c: any) => ({
+                ...c,
+                createdAt: toDateRequired(c.createdAt),
+            }));
+            
+            const files: ProjectFile[] = (data.files || []).map((f: any) => ({
+                ...f,
+                uploadedAt: toDateRequired(f.uploadedAt),
+            }));
+            
+            const tasks: Task[] = (data.tasks || []).map((t: any) => ({
+                ...t,
+                deadline: toDate(t.deadline),
+                files: (t.files || []).map((f: any) => ({
+                    ...f,
+                    uploadedAt: toDateRequired(f.uploadedAt),
+                })),
+                assignedTo: t.assignedTo || [],
+            }));
+            
+            return {
+                id: doc.id,
+                ...data,
+                deadline: toDate(data.deadline),
+                comments,
+                files,
+                tasks,
+                allocatedResources: data.allocatedResources || [],
+            } as Project;
         });
         
         const usersData = usersSnap.docs.reduce((acc, doc) => {
