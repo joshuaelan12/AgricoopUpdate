@@ -130,7 +130,7 @@ export async function deleteProject(input: DeleteProjectInput, actorName: string
     }
 }
 
-export async function addTaskToProject(input: AddTaskInput, actorName: string) {
+export async function addTaskToProject(input: AddTaskInput, actor: { uid: string, displayName: string }) {
     try {
         const { projectId, ...taskData } = AddTaskInputSchema.parse(input);
         const { ref, data } = await getProjectAndValidate(projectId);
@@ -154,8 +154,13 @@ export async function addTaskToProject(input: AddTaskInput, actorName: string) {
             updatedAt: FieldValue.serverTimestamp(),
         });
 
-        await logActivity(data.companyId, `${actorName} added task "${newTask.title}" to project "${data.title}".`);
-        await createNotificationsForTeam(newTask.assignedTo, `${actorName} assigned you a new task in project "${data.title}": ${newTask.title}`, `/projects#${projectId}`);
+        await logActivity(data.companyId, `${actor.displayName} added task "${newTask.title}" to project "${data.title}".`);
+        await createNotificationsForTeam(
+            newTask.assignedTo, 
+            `${actor.displayName} assigned you a new task in project "${data.title}": ${newTask.title}`, 
+            `/projects#${projectId}`,
+            actor.uid
+        );
         revalidatePath('/projects');
         revalidatePath('/');
 
@@ -166,10 +171,13 @@ export async function addTaskToProject(input: AddTaskInput, actorName: string) {
     }
 }
 
-export async function updateTask(input: UpdateTaskInput, actorName: string) {
+export async function updateTask(input: UpdateTaskInput, actor: { uid: string, displayName: string }) {
     try {
         const { projectId, taskId, ...updateData } = UpdateTaskInputSchema.parse(input);
         const { ref, data } = await getProjectAndValidate(projectId);
+
+        const originalTask = (data.tasks || []).find((task: Task) => task.id === taskId);
+        if (!originalTask) throw new Error("Task not found in project.");
 
         let taskUpdated = false;
         const updatedTasks = (data.tasks || []).map((task: Task) => {
@@ -191,10 +199,31 @@ export async function updateTask(input: UpdateTaskInput, actorName: string) {
             updatedAt: FieldValue.serverTimestamp(),
         });
 
-        const updatedTask = updatedTasks.find(t => t.id === taskId);
-        await logActivity(data.companyId, `${actorName} updated task "${updatedTask.title}" in project "${data.title}".`);
-        if (updateData.status) {
-             await createNotificationsForTeam(data.team, `Task "${updatedTask.title}" in project "${data.title}" was updated to "${updateData.status}"`, `/projects#${projectId}`, actorName);
+        const updatedTask = updatedTasks.find(t => t.id === taskId)!;
+        await logActivity(data.companyId, `${actor.displayName} updated task "${updatedTask.title}" in project "${data.title}".`);
+        
+        // Handle notifications for newly assigned users
+        if (updateData.assignedTo) {
+            const originalAssignees = new Set(originalTask.assignedTo);
+            const newAssignees = updateData.assignedTo.filter(userId => !originalAssignees.has(userId));
+            if (newAssignees.length > 0) {
+                await createNotificationsForTeam(
+                    newAssignees, 
+                    `${actor.displayName} assigned you to the task "${updatedTask.title}" in project "${data.title}".`, 
+                    `/projects#${projectId}`,
+                    actor.uid
+                );
+            }
+        }
+        
+        // Handle notifications for status change
+        if (updateData.status && updateData.status !== originalTask.status) {
+             await createNotificationsForTeam(
+                 updatedTask.assignedTo, // Notify current assignees of the task
+                 `The status of task "${updatedTask.title}" in project "${data.title}" was updated to "${updateData.status}".`, 
+                 `/projects#${projectId}`, 
+                 actor.uid
+            );
         }
         
         revalidatePath('/projects');
