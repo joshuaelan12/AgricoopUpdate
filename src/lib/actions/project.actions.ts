@@ -170,7 +170,7 @@ export async function addTaskToProject(input: AddTaskInput, actor: { uid: string
             id: adminDb.collection('projects').doc().id,
             title: taskData.title,
             assignedTo: taskData.assignedTo,
-            deadline: taskData.deadline,
+            deadline: taskData.deadline ?? null,
             status: 'To Do',
             files: [],
         };
@@ -210,18 +210,18 @@ export async function updateTask(input: UpdateTaskInput, actor: { uid: string, d
         const { projectId, taskId, ...updateData } = UpdateTaskInputSchema.parse(input);
         const { ref, data } = await getProjectAndValidate(projectId);
 
-        const tasksFromDb: any[] = data.tasks || [];
+        // First, apply updates to the raw data
+        const tasksFromDb = (data.tasks || []).map((t: any) => ({ ...t })); // Deep copy to avoid mutation issues
         const taskIndex = tasksFromDb.findIndex((task) => task.id === taskId);
 
         if (taskIndex === -1) {
             throw new Error("Task not found in project.");
         }
         
-        const originalTask = tasksFromDb[taskIndex];
-        // Apply updates from the client to the raw task object from the DB
+        const originalTask = { ...tasksFromDb[taskIndex] }; // Copy original task for notifications
         tasksFromDb[taskIndex] = { ...originalTask, ...updateData };
         
-        // Normalize the entire tasks array to ensure consistent data types (e.g., all dates are JS Dates)
+        // THEN, normalize the entire array to ensure consistent types before writing
         const normalizedTasks = normalizeTasksArrayForWrite(tasksFromDb);
         const { progress, team } = recalculateProgressAndTeam(normalizedTasks);
 
