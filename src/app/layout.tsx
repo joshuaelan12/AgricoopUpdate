@@ -10,7 +10,6 @@ import {
   Warehouse,
   FolderKanban,
   Users,
-  GanttChartSquare,
   History,
   ClipboardList,
   Sheet,
@@ -73,14 +72,6 @@ function AppLayout({ children }: { children: React.ReactNode }) {
                                 <Link href="/resources">
                                     <Warehouse />
                                     <span>Resources</span>
-                                </Link>
-                            </SidebarMenuButton>
-                        </SidebarMenuItem>
-                        <SidebarMenuItem>
-                          <SidebarMenuButton asChild tooltip="Planning" isActive={isActive('/planning')}>
-                                <Link href="/planning">
-                                    <GanttChartSquare />
-                                    <span>Planning</span>
                                 </Link>
                             </SidebarMenuButton>
                         </SidebarMenuItem>

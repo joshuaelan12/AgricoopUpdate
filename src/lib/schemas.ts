@@ -1,8 +1,47 @@
-
 import { z } from 'zod';
 
-// --- User Schemas ---
+// --- Base Data Interfaces (for use in components) ---
 
+export interface Comment {
+  id: string;
+  text: string;
+  authorId: string;
+  authorName: string;
+  createdAt: Date;
+}
+
+export const TaskStatusSchema = z.enum(['To Do', 'In Progress', 'Completed']);
+export const TaskSchema = z.object({
+  id: z.string(),
+  title: z.string().min(1, "Task title is required."),
+  assignedTo: z.array(z.string()),
+  deadline: z.date().nullable(),
+  status: TaskStatusSchema,
+});
+export type Task = z.infer<typeof TaskSchema>;
+
+
+export interface Project {
+  id: string;
+  title: string;
+  status: "In Progress" | "On Hold" | "Completed" | "Planning" | "Delayed";
+  description: string;
+  progress: number;
+  team: string[]; // Array of user UIDs
+  companyId: string;
+  comments: Comment[];
+  tasks: Task[];
+  priority?: 'Low' | 'Medium' | 'High';
+  deadline?: any; // Firestore timestamp, will be converted to Date
+  estimatedBudget?: number;
+}
+
+export interface UserData {
+  uid: string;
+  displayName: string;
+}
+
+// --- User Schemas ---
 export const CreateUserInputSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
@@ -25,22 +64,60 @@ export type CreateUserOutput = z.infer<typeof CreateUserOutputSchema>;
 
 
 // --- Project Schemas ---
-
-export const CreateProjectInputSchema = z.object({
+const ProjectCoreSchema = {
   title: z.string().min(1, "Title is required."),
   description: z.string().min(1, "Description is required."),
   status: z.enum(["Planning", "In Progress", "On Hold", "Completed", "Delayed"]),
-  team: z.array(z.string()).min(1, "At least one team member is required."),
+  priority: z.enum(['Low', 'Medium', 'High']).default('Medium'),
+  deadline: z.date().nullable().optional(),
+  estimatedBudget: z.coerce.number().min(0, "Budget must be a positive number.").optional(),
+};
+
+export const CreateProjectInputSchema = z.object({
+  ...ProjectCoreSchema,
   companyId: z.string(),
 });
 export type CreateProjectInput = z.infer<typeof CreateProjectInputSchema>;
 
-export const UpdateProjectProgressInputSchema = z.object({
+export const UpdateProjectInputSchema = z.object({
   projectId: z.string(),
-  progress: z.number().min(0).max(100),
+  ...ProjectCoreSchema,
 });
-export type UpdateProjectProgressInput = z.infer<typeof UpdateProjectProgressInputSchema>;
+export type UpdateProjectInput = z.infer<typeof UpdateProjectInputSchema>;
 
+export const DeleteProjectInputSchema = z.object({
+  projectId: z.string(),
+});
+export type DeleteProjectInput = z.infer<typeof DeleteProjectInputSchema>;
+
+
+// --- Task Schemas ---
+export const AddTaskInputSchema = z.object({
+  projectId: z.string(),
+  title: z.string().min(3, "Task title must be at least 3 characters."),
+  assignedTo: z.array(z.string()).min(1, "Assign task to at least one member."),
+  deadline: z.date().nullable().optional(),
+});
+export type AddTaskInput = z.infer<typeof AddTaskInputSchema>;
+
+export const UpdateTaskInputSchema = z.object({
+  projectId: z.string(),
+  taskId: z.string(),
+  title: z.string().min(3, "Task title must be at least 3 characters.").optional(),
+  assignedTo: z.array(z.string()).min(1, "Assign task to at least one member.").optional(),
+  deadline: z.date().nullable().optional(),
+  status: TaskStatusSchema.optional(),
+});
+export type UpdateTaskInput = z.infer<typeof UpdateTaskInputSchema>;
+
+export const DeleteTaskInputSchema = z.object({
+  projectId: z.string(),
+  taskId: z.string(),
+});
+export type DeleteTaskInput = z.infer<typeof DeleteTaskInputSchema>;
+
+
+// --- Comment Schemas ---
 export const AddProjectCommentInputSchema = z.object({
   projectId: z.string(),
   commentText: z.string().min(1, "Comment cannot be empty."),
@@ -56,33 +133,6 @@ export const DeleteProjectCommentInputSchema = z.object({
 });
 export type DeleteProjectCommentInput = z.infer<typeof DeleteProjectCommentInputSchema>;
 
-export const UpdateProjectInputSchema = z.object({
-  id: z.string(),
-  title: z.string().min(1, "Title is required."),
-  description: z.string().min(1, "Description is required."),
-});
-export type UpdateProjectInput = z.infer<typeof UpdateProjectInputSchema>;
-
-export const DeleteProjectInputSchema = z.object({
-  projectId: z.string(),
-});
-export type DeleteProjectInput = z.infer<typeof DeleteProjectInputSchema>;
-
-export const UpdateProjectStatusInputSchema = z.object({
-  projectId: z.string(),
-  status: z.enum(["Planning", "In Progress", "On Hold", "Completed", "Delayed"]),
-});
-export type UpdateProjectStatusInput = z.infer<typeof UpdateProjectStatusInputSchema>;
-
-export const UpdateProjectPlanningInputSchema = z.object({
-  projectId: z.string(),
-  objectives: z.string().optional(),
-  expectedOutcomes: z.string().optional(),
-  priority: z.enum(['Low', 'Medium', 'High']),
-  deadline: z.date().nullable().optional(),
-  estimatedBudget: z.coerce.number().min(0, "Budget must be a positive number.").optional(),
-});
-export type UpdateProjectPlanningInput = z.infer<typeof UpdateProjectPlanningInputSchema>;
 
 // --- Project Output Schemas ---
 export const ProjectOutputSchema = z.object({
@@ -110,7 +160,6 @@ export type DeleteProjectOutputInput = z.infer<typeof DeleteProjectOutputInputSc
 
 
 // --- Resource Schemas ---
-
 export const CreateResourceInputSchema = z.object({
   name: z.string().min(1, "Resource name is required."),
   category: z.enum(["Inputs", "Equipment", "Infrastructure", "Finance"]),
