@@ -32,7 +32,7 @@ export interface Project {
   comments: Comment[];
   tasks: Task[];
   priority?: 'Low' | 'Medium' | 'High';
-  deadline?: any; // Firestore timestamp, will be converted to Date
+  deadline?: Date | null;
   estimatedBudget?: number;
 }
 

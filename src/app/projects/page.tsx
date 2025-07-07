@@ -382,7 +382,7 @@ function ProjectDetailsDialog({ project, users, currentUser, onActionComplete }:
           </div>
           <div className="flex items-center gap-4 pt-2 text-sm">
             <Badge className={`${statusColors[project.status]} text-primary-foreground`}>{project.status}</Badge>
-            {project.deadline && <span>Deadline: {format(new Date(project.deadline), 'PP')}</span>}
+            {project.deadline && <span>Deadline: {format(project.deadline, 'PP')}</span>}
             {project.estimatedBudget && <span>Budget: {currencyFormatter.format(project.estimatedBudget)}</span>}
           </div>
         </DialogHeader>
@@ -411,7 +411,7 @@ function ProjectDetailsDialog({ project, users, currentUser, onActionComplete }:
                                     <div className="flex-grow">
                                         <p className="font-medium">{task.title}</p>
                                         <div className="flex items-center gap-x-3 text-xs text-muted-foreground">
-                                            {task.deadline && <span>Due: {format(new Date(task.deadline), 'PP')}</span>}
+                                            {task.deadline && <span>Due: {format(task.deadline, 'PP')}</span>}
                                             {task.assignedTo.length > 0 && (
                                                 <div className="flex items-center gap-1">
                                                     <UsersIcon className="h-3 w-3" />
@@ -631,9 +631,10 @@ export default function ProjectsPage() {
 
         const projectsData = projectsSnap.docs.map(doc => {
             const data = doc.data();
+            const deadline = data.deadline?.toDate() ?? null;
             const comments = (data.comments || []).map((comment: any) => ({ ...comment, createdAt: comment.createdAt?.toDate() })).filter((c: Comment) => c.createdAt);
             const tasks = (data.tasks || []).map((task: any) => ({ ...task, deadline: task.deadline?.toDate() })).filter((t: Task) => t.id);
-            return { id: doc.id, ...data, comments, tasks } as Project;
+            return { id: doc.id, ...data, deadline, comments, tasks } as Project;
         });
         
         const usersData = usersSnap.docs.reduce((acc, doc) => {
