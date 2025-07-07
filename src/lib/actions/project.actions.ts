@@ -56,12 +56,12 @@ const normalizeTasksArray = (tasks: any[]): Task[] => {
     return tasks.map(task => {
         const deadline = task.deadline;
         // Check if it's a Firestore Timestamp and convert, otherwise leave as is (Date or null)
-        const normalizedDeadline = deadline && typeof deadline.toDate === 'function' ? deadline.toDate() : deadline;
+        const normalizedDeadline = deadline?.toDate ? deadline.toDate() : deadline;
         
         const files = task.files || [];
         const normalizedFiles = files.map((file: any) => {
              const uploadedAt = file.uploadedAt;
-             const normalizedUploadedAt = uploadedAt && typeof uploadedAt.toDate === 'function' ? uploadedAt.toDate() : uploadedAt;
+             const normalizedUploadedAt = uploadedAt?.toDate ? uploadedAt.toDate() : uploadedAt;
              return {...file, uploadedAt: normalizedUploadedAt };
         });
 
@@ -202,22 +202,22 @@ export async function updateTask(input: UpdateTaskInput, actor: { uid: string, d
         const { ref, data } = await getProjectAndValidate(projectId);
 
         const tasksFromDb: any[] = data.tasks || [];
-        const originalTask = tasksFromDb.find((task) => task.id === taskId);
-        if (!originalTask) throw new Error("Task not found in project.");
-
-        let taskUpdated = false;
-        const mixedTasks = tasksFromDb.map((task) => {
-            if (task.id === taskId) {
-                taskUpdated = true;
-                return { ...task, ...updateData };
-            }
-            return task;
-        });
-
-        if (!taskUpdated) throw new Error("Task not found in project.");
         
-        const normalizedTasks = normalizeTasksArray(mixedTasks);
+        // 1. Normalize the entire array from the database first.
+        const normalizedTasks = normalizeTasksArray(tasksFromDb);
+
+        // 2. Find the task and its index in the normalized array.
+        const taskIndex = normalizedTasks.findIndex((task) => task.id === taskId);
+        if (taskIndex === -1) {
+            throw new Error("Task not found in project.");
+        }
         
+        const originalTask = normalizedTasks[taskIndex];
+
+        // 3. Update the task at the found index with the new data.
+        normalizedTasks[taskIndex] = { ...originalTask, ...updateData };
+
+        // 4. Recalculate progress and team based on the fully updated and normalized array.
         const { progress, team } = recalculateProgressAndTeam(normalizedTasks);
 
         await ref.update({
@@ -226,8 +226,8 @@ export async function updateTask(input: UpdateTaskInput, actor: { uid: string, d
             progress: progress,
             updatedAt: FieldValue.serverTimestamp(),
         });
-
-        const updatedTask = normalizedTasks.find(t => t.id === taskId)!;
+        
+        const updatedTask = normalizedTasks[taskIndex]!;
         await logActivity(data.companyId, `${actor.displayName} updated task "${updatedTask.title}" in project "${data.title}".`);
         
         if (updateData.assignedTo) {
@@ -261,6 +261,7 @@ export async function updateTask(input: UpdateTaskInput, actor: { uid: string, d
         return { success: false, error: error.message || "An unknown error occurred." };
     }
 }
+
 
 export async function deleteTask(input: DeleteTaskInput, actorName: string) {
     try {
