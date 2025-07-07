@@ -11,6 +11,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 
 import { createProject, addProjectComment, deleteProjectComment, updateProject, deleteProject, addTaskToProject, updateTask, deleteTask, addFileToProject, deleteFileFromProject, addFileToTask, deleteFileFromTask, allocateResourceToProject, deallocateResourceFromProject } from "@/lib/actions/project.actions";
@@ -140,9 +141,10 @@ const ProjectCardSkeleton = () => (
 );
 
 // --- CREATE PROJECT DIALOG ---
-function CreateProjectDialog({ actor, onActionComplete }: { actor: { uid: string, displayName: string, companyId: string }, onActionComplete: () => void }) {
+function CreateProjectDialog({ actor, onActionComplete, isMobile }: { actor: { uid: string, displayName: string, companyId: string }, onActionComplete: () => void, isMobile: boolean }) {
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   const form = useForm<z.infer<typeof CreateProjectInputSchema>>({
     resolver: zodResolver(CreateProjectInputSchema),
@@ -208,9 +210,47 @@ function CreateProjectDialog({ actor, onActionComplete }: { actor: { uid: string
               )}/>
             </div>
              <div className="grid grid-cols-2 gap-4">
-                <FormField control={form.control} name="deadline" render={({ field }) => (
-                <FormItem className="flex flex-col"><FormLabel>Deadline</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("pl-3 text-left font-normal",!field.value && "text-muted-foreground")}>{field.value ? format(field.value, "PPP") : (<span>Pick a date</span>)}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(date) => date < new Date("1900-01-01")} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>
-              )}/>
+                <FormField control={form.control} name="deadline" render={({ field }) => {
+                    const handleDateSelect = (date: Date | undefined) => {
+                        field.onChange(date);
+                        setDatePickerOpen(false);
+                    };
+                    return (
+                        <FormItem className="flex flex-col">
+                            <FormLabel>Deadline</FormLabel>
+                            {isMobile ? (
+                                <Dialog open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                                    <DialogTrigger asChild>
+                                        <FormControl>
+                                            <Button variant={"outline"} className={cn("pl-3 text-left font-normal w-full", !field.value && "text-muted-foreground")}>
+                                                {field.value ? format(field.value, "PPP") : (<span>Pick a date</span>)}
+                                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                            </Button>
+                                        </FormControl>
+                                    </DialogTrigger>
+                                    <DialogContent className="w-auto">
+                                        <Calendar mode="single" selected={field.value ?? undefined} onSelect={handleDateSelect} disabled={(date) => date < new Date("1900-01-01")} initialFocus />
+                                    </DialogContent>
+                                </Dialog>
+                            ) : (
+                                <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                                    <PopoverTrigger asChild>
+                                        <FormControl>
+                                            <Button variant={"outline"} className={cn("pl-3 text-left font-normal w-full", !field.value && "text-muted-foreground")}>
+                                                {field.value ? format(field.value, "PPP") : (<span>Pick a date</span>)}
+                                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                            </Button>
+                                        </FormControl>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0" align="start">
+                                        <Calendar mode="single" selected={field.value ?? undefined} onSelect={handleDateSelect} disabled={(date) => date < new Date("1900-01-01")} initialFocus />
+                                    </PopoverContent>
+                                </Popover>
+                            )}
+                            <FormMessage />
+                        </FormItem>
+                    );
+                }}/>
               <FormField control={form.control} name="estimatedBudget" render={({ field }) => (
                 <FormItem><FormLabel>Est. Budget (XAF)</FormLabel><FormControl><Input type="number" placeholder="500000" {...field} /></FormControl><FormMessage /></FormItem>
               )}/>
@@ -230,8 +270,9 @@ function CreateProjectDialog({ actor, onActionComplete }: { actor: { uid: string
 }
 
 // --- TASK MANAGEMENT DIALOGS ---
-function AddOrEditTaskDialog({ mode, project, task, users, actor, onActionComplete }: { mode: 'add' | 'edit', project: Project, task?: Task, users: UserData[], actor: { uid: string, displayName: string }, onActionComplete: () => void }) {
+function AddOrEditTaskDialog({ mode, project, task, users, actor, onActionComplete, isMobile }: { mode: 'add' | 'edit', project: Project, task?: Task, users: UserData[], actor: { uid: string, displayName: string }, onActionComplete: () => void, isMobile: boolean }) {
   const [open, setOpen] = useState(false);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   const { toast } = useToast();
   const isEdit = mode === 'edit';
 
@@ -295,9 +336,47 @@ function AddOrEditTaskDialog({ mode, project, task, users, actor, onActionComple
                <FormField control={form.control} name="assignedTo" render={({ field }) => (
                 <FormItem><FormLabel>Assign To</FormLabel><DropdownMenu><DropdownMenuTrigger asChild><FormControl><Button variant="outline" className="w-full justify-between">{field.value?.length > 0 ? `${field.value.length} selected` : "Select members"}<ChevronDown className="h-4 w-4 opacity-50" /></Button></FormControl></DropdownMenuTrigger><DropdownMenuContent className="w-56"><DropdownMenuLabel>Available Members</DropdownMenuLabel><DropdownMenuSeparator />{users.map(user => (<DropdownMenuCheckboxItem key={user.uid} checked={field.value?.includes(user.uid)} onCheckedChange={(checked) => {return checked ? field.onChange([...(field.value || []), user.uid]) : field.onChange(field.value?.filter(id => id !== user.uid))}}>{user.displayName}</DropdownMenuCheckboxItem>))}</DropdownMenuContent></DropdownMenu><FormMessage /></FormItem>
                )}/>
-               <FormField control={form.control} name="deadline" render={({ field }) => (
-                <FormItem className="flex flex-col"><FormLabel>Deadline</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("pl-3 text-left font-normal",!field.value && "text-muted-foreground")}>{field.value ? format(field.value, "PPP") : (<span>Pick a date</span>)}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(date) => date < new Date("1900-01-01")} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>
-               )}/>
+               <FormField control={form.control} name="deadline" render={({ field }) => {
+                  const handleDateSelect = (date: Date | undefined) => {
+                      field.onChange(date);
+                      setDatePickerOpen(false);
+                  };
+                  return (
+                    <FormItem className="flex flex-col">
+                        <FormLabel>Deadline</FormLabel>
+                        {isMobile ? (
+                            <Dialog open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                                <DialogTrigger asChild>
+                                    <FormControl>
+                                        <Button variant={"outline"} className={cn("pl-3 text-left font-normal w-full", !field.value && "text-muted-foreground")}>
+                                            {field.value ? format(field.value, "PPP") : (<span>Pick a date</span>)}
+                                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                        </Button>
+                                    </FormControl>
+                                </DialogTrigger>
+                                <DialogContent className="w-auto">
+                                    <Calendar mode="single" selected={field.value ?? undefined} onSelect={handleDateSelect} disabled={(date) => date < new Date("1900-01-01")} initialFocus />
+                                </DialogContent>
+                            </Dialog>
+                        ) : (
+                            <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                                <PopoverTrigger asChild>
+                                    <FormControl>
+                                        <Button variant={"outline"} className={cn("pl-3 text-left font-normal w-full", !field.value && "text-muted-foreground")}>
+                                            {field.value ? format(field.value, "PPP") : (<span>Pick a date</span>)}
+                                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                        </Button>
+                                    </FormControl>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                    <Calendar mode="single" selected={field.value ?? undefined} onSelect={handleDateSelect} disabled={(date) => date < new Date("1900-01-01")} initialFocus />
+                                </PopoverContent>
+                            </Popover>
+                        )}
+                        <FormMessage />
+                    </FormItem>
+                  );
+                }}/>
              </div>
              {isEdit && (
                 <FormField control={form.control} name="status" render={({ field }) => (
@@ -579,7 +658,7 @@ function ResourceManagementTab({ project, allResources, actor, onActionComplete 
 
 
 // --- PROJECT DETAILS DIALOG ---
-function ProjectDetailsDialog({ project, users, resources, currentUser, onActionComplete }: { project: Project, users: { [uid: string]: UserData }, resources: Resource[], currentUser: {uid: string, displayName: string, role: string}, onActionComplete: () => void }) {
+function ProjectDetailsDialog({ project, users, resources, currentUser, onActionComplete, isMobile }: { project: Project, users: { [uid: string]: UserData }, resources: Resource[], currentUser: {uid: string, displayName: string, role: string}, onActionComplete: () => void, isMobile: boolean }) {
   const { toast } = useToast();
   const [isDeletingTask, setIsDeletingTask] = useState<string | null>(null);
   const [newComment, setNewComment] = useState('');
@@ -659,7 +738,7 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
               <DialogTitle className="font-headline text-3xl">{project.title}</DialogTitle>
               <DialogDescription className="mt-1">{project.description}</DialogDescription>
             </div>
-             <ProjectActions project={project} actorName={currentUser.displayName} onActionComplete={onActionComplete} />
+             <ProjectActions project={project} actorName={currentUser.displayName} onActionComplete={onActionComplete} isMobile={isMobile} />
           </div>
           <div className="flex items-center gap-4 pt-2 text-sm">
             <Badge className={`${statusColors[project.status]} text-primary-foreground`}>{project.status}</Badge>
@@ -683,7 +762,7 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
                         <CardTitle className="text-xl font-headline">Task List</CardTitle>
                         <CardDescription>Track and manage all tasks for this project.</CardDescription>
                     </div>
-                    {isManager && <AddOrEditTaskDialog mode="add" project={project} users={Object.values(users)} actor={cleanActor} onActionComplete={onActionComplete} />}
+                    {isManager && <AddOrEditTaskDialog mode="add" project={project} users={Object.values(users)} actor={cleanActor} onActionComplete={onActionComplete} isMobile={isMobile} />}
                 </CardHeader>
                 <CardContent className="p-4 space-y-4">
                     {project.tasks?.length > 0 ? (
@@ -714,7 +793,7 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
-                                                    <AddOrEditTaskDialog mode="edit" project={project} task={task} users={Object.values(users)} actor={cleanActor} onActionComplete={onActionComplete} />
+                                                    <AddOrEditTaskDialog mode="edit" project={project} task={task} users={Object.values(users)} actor={cleanActor} onActionComplete={onActionComplete} isMobile={isMobile} />
                                                     <DropdownMenuSeparator />
                                                      <AlertDialog>
                                                         <AlertDialogTrigger asChild><DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive"><Trash2 className="mr-2 h-4 w-4" /> Delete Task</DropdownMenuItem></AlertDialogTrigger>
@@ -835,10 +914,11 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
 
 
 // --- EDIT/DELETE PROJECT ACTIONS ---
-function ProjectActions({ project, actorName, onActionComplete }: { project: Project; actorName: string; onActionComplete: () => void }) {
+function ProjectActions({ project, actorName, onActionComplete, isMobile }: { project: Project; actorName: string; onActionComplete: () => void; isMobile: boolean; }) {
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   const handleDelete = async () => {
     setIsDeleting(true);
@@ -918,9 +998,47 @@ function ProjectActions({ project, actorName, onActionComplete }: { project: Pro
               )}/>
             </div>
              <div className="grid grid-cols-2 gap-4">
-                <FormField control={form.control} name="deadline" render={({ field }) => (
-                <FormItem className="flex flex-col"><FormLabel>Deadline</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("pl-3 text-left font-normal",!field.value && "text-muted-foreground")}>{field.value ? format(field.value, "PPP") : (<span>Pick a date</span>)}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>
-              )}/>
+                <FormField control={form.control} name="deadline" render={({ field }) => {
+                    const handleDateSelect = (date: Date | undefined) => {
+                        field.onChange(date);
+                        setDatePickerOpen(false);
+                    };
+                    return (
+                        <FormItem className="flex flex-col">
+                            <FormLabel>Deadline</FormLabel>
+                            {isMobile ? (
+                                <Dialog open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                                    <DialogTrigger asChild>
+                                        <FormControl>
+                                            <Button variant={"outline"} className={cn("pl-3 text-left font-normal w-full", !field.value && "text-muted-foreground")}>
+                                                {field.value ? format(field.value, "PPP") : (<span>Pick a date</span>)}
+                                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                            </Button>
+                                        </FormControl>
+                                    </DialogTrigger>
+                                    <DialogContent className="w-auto">
+                                        <Calendar mode="single" selected={field.value ?? undefined} onSelect={handleDateSelect} initialFocus />
+                                    </DialogContent>
+                                </Dialog>
+                            ) : (
+                                <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                                    <PopoverTrigger asChild>
+                                        <FormControl>
+                                            <Button variant={"outline"} className={cn("pl-3 text-left font-normal w-full", !field.value && "text-muted-foreground")}>
+                                                {field.value ? format(field.value, "PPP") : (<span>Pick a date</span>)}
+                                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                            </Button>
+                                        </FormControl>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0" align="start">
+                                        <Calendar mode="single" selected={field.value ?? undefined} onSelect={handleDateSelect} initialFocus />
+                                    </PopoverContent>
+                                </Popover>
+                            )}
+                            <FormMessage />
+                        </FormItem>
+                    );
+                }}/>
               <FormField control={form.control} name="estimatedBudget" render={({ field }) => (
                 <FormItem><FormLabel>Est. Budget (XAF)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
               )}/>
@@ -946,6 +1064,7 @@ export default function ProjectsPage() {
   const [users, setUsers] = useState<{ [uid: string]: UserData }>({});
   const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
+  const isMobile = useIsMobile();
 
   const fetchData = async () => {
       if (!user?.companyId) {
@@ -1044,7 +1163,7 @@ export default function ProjectsPage() {
           <p className="text-muted-foreground">Browse and manage all projects within your cooperative.</p>
         </div>
          {user && (user.role === 'Admin' || user.role === 'Project Manager') && !loading && (
-          <CreateProjectDialog actor={user} onActionComplete={fetchData} />
+          <CreateProjectDialog actor={user} onActionComplete={fetchData} isMobile={isMobile} />
         )}
       </div>
 
@@ -1086,7 +1205,7 @@ export default function ProjectsPage() {
                         {project.team.length > 5 && <Avatar className="h-8 w-8 border-2 border-card"><AvatarFallback>+{project.team.length - 5}</AvatarFallback></Avatar>}
                         </div>
                     </div>
-                    <ProjectDetailsDialog project={project} users={users} resources={resources} currentUser={user} onActionComplete={fetchData} />
+                    <ProjectDetailsDialog project={project} users={users} resources={resources} currentUser={user} onActionComplete={fetchData} isMobile={isMobile} />
                 </CardFooter>
               </Card>
             )
