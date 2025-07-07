@@ -654,8 +654,8 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
         <DialogHeader>
           <div className="flex items-start justify-between">
             <div>
-              <CardTitle className="font-headline text-3xl">{project.title}</CardTitle>
-              <CardDescription className="mt-1">{project.description}</CardDescription>
+              <DialogTitle className="font-headline text-3xl">{project.title}</DialogTitle>
+              <DialogDescription className="mt-1">{project.description}</DialogDescription>
             </div>
              <ProjectActions project={project} actorName={currentUser.displayName} onActionComplete={onActionComplete} />
           </div>
@@ -972,12 +972,14 @@ export default function ProjectsPage() {
 
             // Helper to safely convert Firestore Timestamps to JS Dates
             const toDate = (timestamp: any): Date | null => {
-                return timestamp?.toDate ? timestamp.toDate() : null;
+                if (!timestamp) return null;
+                return timestamp.toDate ? timestamp.toDate() : (timestamp instanceof Date ? timestamp : null);
             };
 
             // Helper for required dates, providing a fallback to prevent crashes
             const toDateRequired = (timestamp: any): Date => {
-                return timestamp?.toDate ? timestamp.toDate() : new Date(); 
+                if (!timestamp) return new Date();
+                return timestamp.toDate ? timestamp.toDate() : (timestamp instanceof Date ? timestamp : new Date());
             };
             
             const comments: Comment[] = (data.comments || []).map((c: any) => ({
