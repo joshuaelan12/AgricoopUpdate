@@ -12,9 +12,9 @@ import { format } from "date-fns";
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
 
 
-import { createProject, addProjectComment, deleteProjectComment, updateProject, deleteProject, addTaskToProject, updateTask, deleteTask, addFileToProject, deleteFileFromProject, addFileToTask, deleteFileFromTask } from "@/lib/actions/project.actions";
-import { CreateProjectInputSchema, UpdateProjectInputSchema, AddProjectCommentInputSchema, AddTaskInputSchema, UpdateTaskInputSchema, AddFileToProjectInputSchema, AddFileToTaskInputSchema } from "@/lib/schemas";
-import type { Project, Task, UserData, Comment, AddProjectCommentInput, UpdateProjectInput, AddTaskInput, UpdateTaskInput, ProjectFile } from "@/lib/schemas";
+import { createProject, addProjectComment, deleteProjectComment, updateProject, deleteProject, addTaskToProject, updateTask, deleteTask, addFileToProject, deleteFileFromProject, addFileToTask, deleteFileFromTask, allocateResourceToProject, deallocateResourceFromProject } from "@/lib/actions/project.actions";
+import { CreateProjectInputSchema, UpdateProjectInputSchema, AddProjectCommentInputSchema, AddTaskInputSchema, UpdateTaskInputSchema, AddFileToProjectInputSchema, AddFileToTaskInputSchema, AllocateResourceInputSchema } from "@/lib/schemas";
+import type { Project, Task, UserData, Comment, AddProjectCommentInput, UpdateProjectInput, AddTaskInput, UpdateTaskInput, ProjectFile, AllocatedResource } from "@/lib/schemas";
 import { useToast } from "@/hooks/use-toast";
 
 import {
@@ -69,7 +69,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
-import { FolderKanban, PlusCircle, Users as UsersIcon, Loader2, MessageSquare, Trash2, MoreVertical, Edit, CalendarIcon, Check, GripVertical, Grip, ChevronDown, ListTodo, Paperclip, UploadCloud, File as FileIcon, Download } from "lucide-react";
+import { FolderKanban, PlusCircle, Users as UsersIcon, Loader2, MessageSquare, Trash2, MoreVertical, Edit, CalendarIcon, Check, GripVertical, Grip, ChevronDown, ListTodo, Paperclip, UploadCloud, File as FileIcon, Download, Package } from "lucide-react";
 
 // --- HELPER FUNCTIONS & CONSTANTS ---
 const getInitials = (name: string | undefined) => {
@@ -98,6 +98,15 @@ const currencyFormatter = new Intl.NumberFormat('fr-CM', {
   currency: 'XAF',
   minimumFractionDigits: 0,
 });
+
+interface Resource {
+    id: string;
+    name: string;
+    category: string;
+    quantity: number;
+    status: string;
+    unit: string;
+}
 
 // --- SKELETON COMPONENT ---
 const ProjectCardSkeleton = () => (
@@ -341,7 +350,7 @@ function FileManager({
     setIsUploading(true);
     setUploadProgress(0);
 
-    const fileId = adminDb.collection("projects").doc().id; // Generate a unique ID
+    const fileId = collection(db, 'projects').doc().id; // Generate a unique ID
     const filePath = taskId
       ? `projects/${projectId}/tasks/${taskId}/${fileId}-${selectedFile.name}`
       : `projects/${projectId}/${fileId}-${selectedFile.name}`;
@@ -454,8 +463,122 @@ function FileManager({
 }
 
 
+// --- RESOURCE MANAGEMENT TAB ---
+function ResourceManagementTab({ project, allResources, actor, onActionComplete }: { project: Project; allResources: Resource[]; actor: { uid: string; displayName: string; }; onActionComplete: () => void; }) {
+  const { toast } = useToast();
+  const [isDeallocating, setIsDeallocating] = useState<string | null>(null);
+
+  const form = useForm<{ resourceId: string; quantity: number }>({
+    resolver: zodResolver(AllocateResourceInputSchema.omit({ projectId: true })),
+    defaultValues: { resourceId: '', quantity: 1 },
+  });
+
+  const availableResources = useMemo(() => {
+    const allocatedIds = new Set(project.allocatedResources.map(r => r.resourceId));
+    return allResources.filter(r => !allocatedIds.has(r.id));
+  }, [allResources, project.allocatedResources]);
+
+  const onAllocateSubmit = async (values: { resourceId: string; quantity: number }) => {
+    const result = await allocateResourceToProject({ ...values, projectId: project.id }, actor.displayName);
+    if (result.success) {
+      toast({ title: "Resource Allocated" });
+      form.reset();
+      onActionComplete();
+    } else {
+      toast({ variant: 'destructive', title: 'Allocation Failed', description: result.error });
+    }
+  };
+
+  const handleDeallocate = async (resourceId: string) => {
+    setIsDeallocating(resourceId);
+    const result = await deallocateResourceFromProject({ projectId: project.id, resourceId }, actor.displayName);
+    if (result.success) {
+      toast({ title: 'Resource Deallocated' });
+      onActionComplete();
+    } else {
+      toast({ variant: 'destructive', title: 'Deallocation Failed', description: result.error });
+    }
+    setIsDeallocating(null);
+  };
+  
+  return (
+    <Card className="mt-2 border-0 shadow-none">
+      <CardHeader className="p-4">
+        <CardTitle className="text-xl font-headline">Resource Allocation</CardTitle>
+        <CardDescription>Allocate resources from your inventory to this project.</CardDescription>
+      </CardHeader>
+      <CardContent className="p-4 space-y-6">
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onAllocateSubmit)} className="p-4 border rounded-lg space-y-4 bg-muted/50">
+            <h4 className="font-medium">Allocate a New Resource</h4>
+            <div className="grid grid-cols-3 gap-4">
+              <FormField control={form.control} name="resourceId" render={({ field }) => (
+                <FormItem className="col-span-2">
+                  <FormLabel>Resource</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select a resource" /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      {availableResources.map(r => (
+                        <SelectItem key={r.id} value={r.id}>{r.name} ({r.quantity} {r.unit} available)</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="quantity" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Quantity</FormLabel>
+                  <FormControl><Input type="number" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            </div>
+            <Button type="submit" disabled={form.formState.isSubmitting}>
+              {form.formState.isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
+              Allocate
+            </Button>
+          </form>
+        </Form>
+
+        <div>
+          <h4 className="font-medium mb-2">Allocated Resources</h4>
+          {project.allocatedResources.length > 0 ? (
+            <div className="space-y-2">
+              {project.allocatedResources.map(resource => (
+                <div key={resource.resourceId} className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50">
+                  <div className="flex items-center gap-3">
+                    <Package className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <p className="font-medium">{resource.name}</p>
+                      <p className="text-xs text-muted-foreground">{resource.quantity} {resource.unit}</p>
+                    </div>
+                  </div>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" disabled={isDeallocating === resource.resourceId}><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will deallocate the resource and return it to your main inventory.</AlertDialogDescription></AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => handleDeallocate(resource.resourceId)}>{isDeallocating === resource.resourceId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Deallocate'}</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">No resources allocated to this project.</p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+
 // --- PROJECT DETAILS DIALOG ---
-function ProjectDetailsDialog({ project, users, currentUser, onActionComplete }: { project: Project, users: { [uid: string]: UserData }, currentUser: {uid: string, displayName: string, role: string}, onActionComplete: () => void }) {
+function ProjectDetailsDialog({ project, users, resources, currentUser, onActionComplete }: { project: Project, users: { [uid: string]: UserData }, resources: Resource[], currentUser: {uid: string, displayName: string, role: string}, onActionComplete: () => void }) {
   const { toast } = useToast();
   const [isDeletingTask, setIsDeletingTask] = useState<string | null>(null);
   const [newComment, setNewComment] = useState('');
@@ -545,6 +668,7 @@ function ProjectDetailsDialog({ project, users, currentUser, onActionComplete }:
         <Tabs defaultValue="tasks" className="flex-grow flex flex-col min-h-0">
           <TabsList className="mt-4">
             <TabsTrigger value="tasks">Tasks</TabsTrigger>
+            <TabsTrigger value="resources">Resources</TabsTrigger>
             <TabsTrigger value="files">Files</TabsTrigger>
             <TabsTrigger value="comments">Comments</TabsTrigger>
           </TabsList>
@@ -619,6 +743,23 @@ function ProjectDetailsDialog({ project, users, currentUser, onActionComplete }:
                     )}
                 </CardContent>
               </Card>
+          </TabsContent>
+
+          <TabsContent value="resources" className="flex-grow overflow-y-auto mt-0 -mr-6 pr-6">
+            {isManager ? (
+              <ResourceManagementTab 
+                project={project}
+                allResources={resources}
+                actor={currentUser}
+                onActionComplete={onActionComplete}
+              />
+            ) : (
+               <Card className="mt-2 border-0 shadow-none">
+                  <CardContent className="p-4">
+                    <p className="text-muted-foreground text-center py-8">Resource allocation can only be managed by Admins or Project Managers.</p>
+                  </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="files" className="flex-grow overflow-y-auto mt-0 -mr-6 pr-6">
@@ -800,6 +941,7 @@ export default function ProjectsPage() {
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<{ [uid: string]: UserData }>({});
+  const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
@@ -812,9 +954,17 @@ export default function ProjectsPage() {
         const { companyId } = user;
         const projectsRef = collection(db, 'projects');
         const usersRef = collection(db, 'users');
+        const resourcesRef = collection(db, 'resources');
+
         const projectsQuery = query(projectsRef, where('companyId', '==', companyId));
         const usersQuery = query(usersRef, where('companyId', '==', companyId));
-        const [projectsSnap, usersSnap] = await Promise.all([ getDocs(projectsQuery), getDocs(usersQuery) ]);
+        const resourcesQuery = query(resourcesRef, where('companyId', '==', companyId));
+
+        const [projectsSnap, usersSnap, resourcesSnap] = await Promise.all([ 
+          getDocs(projectsQuery), 
+          getDocs(usersQuery),
+          getDocs(resourcesQuery),
+        ]);
 
         const projectsData = projectsSnap.docs.map(doc => {
             const data = doc.data();
@@ -822,7 +972,8 @@ export default function ProjectsPage() {
             const comments = (data.comments || []).map((comment: any) => ({ ...comment, createdAt: comment.createdAt?.toDate() })).filter((c: Comment) => c.createdAt);
             const files = (data.files || []).map((file: any) => ({ ...file, uploadedAt: file.uploadedAt?.toDate() })).filter((f: ProjectFile) => f.uploadedAt);
             const tasks = (data.tasks || []).map((task: any) => ({ ...task, deadline: task.deadline?.toDate(), files: (task.files || []).map((f:any) => ({...f, uploadedAt: f.uploadedAt?.toDate()})).filter(Boolean) })).filter((t: Task) => t.id);
-            return { id: doc.id, ...data, deadline, comments, tasks, files } as Project;
+            const allocatedResources = data.allocatedResources || [];
+            return { id: doc.id, ...data, deadline, comments, tasks, files, allocatedResources } as Project;
         });
         
         const usersData = usersSnap.docs.reduce((acc, doc) => {
@@ -830,8 +981,11 @@ export default function ProjectsPage() {
           return acc;
         }, {} as { [uid: string]: UserData });
 
+        const resourcesData = resourcesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Resource[];
+
         setProjects(projectsData);
         setUsers(usersData);
+        setResources(resourcesData);
       } catch (error) {
         console.error("Error fetching project data:", error);
       } finally {
@@ -893,7 +1047,7 @@ export default function ProjectsPage() {
                         {project.team.length > 5 && <Avatar className="h-8 w-8 border-2 border-card"><AvatarFallback>+{project.team.length - 5}</AvatarFallback></Avatar>}
                         </div>
                     </div>
-                    <ProjectDetailsDialog project={project} users={users} currentUser={user} onActionComplete={fetchData} />
+                    <ProjectDetailsDialog project={project} users={users} resources={resources} currentUser={user} onActionComplete={fetchData} />
                 </CardFooter>
               </Card>
             )

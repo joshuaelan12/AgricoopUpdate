@@ -31,6 +31,14 @@ export const TaskSchema = z.object({
 export type Task = z.infer<typeof TaskSchema>;
 
 
+export const AllocatedResourceSchema = z.object({
+  resourceId: z.string(),
+  name: z.string(),
+  quantity: z.number(),
+  unit: z.string(),
+});
+export type AllocatedResource = z.infer<typeof AllocatedResourceSchema>;
+
 export interface Project {
   id: string;
   title: string;
@@ -42,6 +50,7 @@ export interface Project {
   comments: Comment[];
   tasks: Task[];
   files: ProjectFile[];
+  allocatedResources: AllocatedResource[];
   priority?: 'Low' | 'Medium' | 'High';
   deadline?: Date | null;
   estimatedBudget?: number;
@@ -230,13 +239,6 @@ export type SuggestChecklistOutput = z.infer<typeof SuggestChecklistOutputSchema
 
 
 // --- Resource Allocation Schemas ---
-export const AllocatedResourceSchema = z.object({
-  resourceId: z.string(),
-  name: z.string(),
-  quantity: z.number(),
-});
-export type AllocatedResource = z.infer<typeof AllocatedResourceSchema>;
-
 export const AllocateResourceInputSchema = z.object({
   projectId: z.string(),
   resourceId: z.string(),
