@@ -50,24 +50,33 @@ const getProjectAndValidate = async (projectId: string) => {
     return { ref: projectRef, data: projectDoc.data()! };
 }
 
-// Helper to normalize the tasks array, converting all Timestamps to JS Dates
-const normalizeTasksArray = (tasks: any[]): Task[] => {
-    if (!tasks) return [];
+// A robust helper to normalize tasks array from any source (DB or client)
+// before writing back to Firestore.
+const normalizeTasksArrayForWrite = (tasks: any[]): Task[] => {
+    if (!Array.isArray(tasks)) return [];
+    
     return tasks.map(task => {
-        const deadline = task.deadline;
-        // Check if it's a Firestore Timestamp and convert, otherwise leave as is (Date or null)
-        const normalizedDeadline = deadline?.toDate ? deadline.toDate() : deadline;
-        
-        const files = task.files || [];
-        const normalizedFiles = files.map((file: any) => {
-             const uploadedAt = file.uploadedAt;
-             const normalizedUploadedAt = uploadedAt?.toDate ? uploadedAt.toDate() : uploadedAt;
-             return {...file, uploadedAt: normalizedUploadedAt };
-        });
+        if (!task || typeof task !== 'object') return null;
 
-        // The Task type from schemas expects JS dates, so we return a compliant object
-        return { ...task, deadline: normalizedDeadline, files: normalizedFiles };
-    });
+        // Convert any Firestore Timestamps to JS Dates
+        const deadline = task.deadline?.toDate ? task.deadline.toDate() : task.deadline;
+        
+        const files = Array.isArray(task.files) ? task.files.map((file: any) => {
+             if (!file || typeof file !== 'object') return null;
+             const uploadedAt = file.uploadedAt?.toDate ? file.uploadedAt.toDate() : file.uploadedAt;
+             return { ...file, uploadedAt };
+        }).filter(Boolean) : [];
+
+        // Ensure all properties conform to the Task schema
+        return {
+            id: task.id,
+            title: task.title,
+            status: task.status,
+            assignedTo: task.assignedTo || [],
+            deadline: deadline,
+            files: files,
+        };
+    }).filter(Boolean) as Task[];
 };
 
 
@@ -78,7 +87,7 @@ const recalculateProgressAndTeam = (tasks: Task[]) => {
     }
     const completedTasks = tasks.filter(t => t.status === 'Completed').length;
     const progress = Math.round((completedTasks / totalTasks) * 100);
-    const team = [...new Set(tasks.flatMap(t => t.assignedTo))];
+    const team = [...new Set(tasks.flatMap(t => t.assignedTo || []))];
     return { progress, team };
 };
 
@@ -167,8 +176,8 @@ export async function addTaskToProject(input: AddTaskInput, actor: { uid: string
         };
         
         const existingTasks = data.tasks || [];
-        const mixedTasks = [...existingTasks, newTask];
-        const normalizedTasks = normalizeTasksArray(mixedTasks);
+        const newTasksList = [...existingTasks, newTask];
+        const normalizedTasks = normalizeTasksArrayForWrite(newTasksList);
 
         const { progress, team } = recalculateProgressAndTeam(normalizedTasks);
 
@@ -202,22 +211,18 @@ export async function updateTask(input: UpdateTaskInput, actor: { uid: string, d
         const { ref, data } = await getProjectAndValidate(projectId);
 
         const tasksFromDb: any[] = data.tasks || [];
-        
-        // 1. Normalize the entire array from the database first.
-        const normalizedTasks = normalizeTasksArray(tasksFromDb);
+        const taskIndex = tasksFromDb.findIndex((task) => task.id === taskId);
 
-        // 2. Find the task and its index in the normalized array.
-        const taskIndex = normalizedTasks.findIndex((task) => task.id === taskId);
         if (taskIndex === -1) {
             throw new Error("Task not found in project.");
         }
         
-        const originalTask = normalizedTasks[taskIndex];
-
-        // 3. Update the task at the found index with the new data.
-        normalizedTasks[taskIndex] = { ...originalTask, ...updateData };
-
-        // 4. Recalculate progress and team based on the fully updated and normalized array.
+        const originalTask = tasksFromDb[taskIndex];
+        // Apply updates from the client to the raw task object from the DB
+        tasksFromDb[taskIndex] = { ...originalTask, ...updateData };
+        
+        // Normalize the entire tasks array to ensure consistent data types (e.g., all dates are JS Dates)
+        const normalizedTasks = normalizeTasksArrayForWrite(tasksFromDb);
         const { progress, team } = recalculateProgressAndTeam(normalizedTasks);
 
         await ref.update({
@@ -231,7 +236,7 @@ export async function updateTask(input: UpdateTaskInput, actor: { uid: string, d
         await logActivity(data.companyId, `${actor.displayName} updated task "${updatedTask.title}" in project "${data.title}".`);
         
         if (updateData.assignedTo) {
-            const originalAssignees = new Set(originalTask.assignedTo);
+            const originalAssignees = new Set(originalTask.assignedTo || []);
             const newAssignees = updateData.assignedTo.filter(userId => !originalAssignees.has(userId));
             if (newAssignees.length > 0) {
                 await createNotificationsForTeam(
@@ -273,7 +278,7 @@ export async function deleteTask(input: DeleteTaskInput, actorName: string) {
         if (!taskToDelete) throw new Error("Task not found.");
 
         const remainingTasks = tasksFromDb.filter((t) => t.id !== taskId);
-        const normalizedTasks = normalizeTasksArray(remainingTasks);
+        const normalizedTasks = normalizeTasksArrayForWrite(remainingTasks);
         
         const { progress, team } = recalculateProgressAndTeam(normalizedTasks);
 
@@ -386,21 +391,18 @@ export async function addFileToTask(input: AddFileToTaskInput, actorName: string
         const { projectId, taskId, file, uploaderName } = AddFileToTaskInputSchema.parse(input);
         const { ref, data } = await getProjectAndValidate(projectId);
 
-        let taskUpdated = false;
         const newFile: ProjectFile = { ...file, uploaderName, uploadedAt: new Date() };
         
-        const updatedTasks = (data.tasks || []).map((task: Task) => {
-            if (task.id === taskId) {
-                taskUpdated = true;
-                const taskFiles = task.files || [];
-                return { ...task, files: [...taskFiles, newFile] };
-            }
-            return task;
-        });
+        const tasksFromDb = data.tasks || [];
+        const taskIndex = tasksFromDb.findIndex((t: any) => t.id === taskId);
 
-        if (!taskUpdated) throw new Error("Task not found in project.");
-        
-        const normalizedTasks = normalizeTasksArray(updatedTasks);
+        if (taskIndex === -1) throw new Error("Task not found in project.");
+
+        const taskToUpdate = tasksFromDb[taskIndex];
+        const updatedFiles = [...(taskToUpdate.files || []), newFile];
+        taskToUpdate.files = updatedFiles;
+
+        const normalizedTasks = normalizeTasksArrayForWrite(tasksFromDb);
 
         await ref.update({ tasks: normalizedTasks, updatedAt: FieldValue.serverTimestamp() });
 
@@ -419,29 +421,26 @@ export async function deleteFileFromTask(input: DeleteFileFromTaskInput, actorNa
         const { projectId, taskId, fileId } = DeleteFileFromTaskInputSchema.parse(input);
         const { ref, data } = await getProjectAndValidate(projectId);
 
-        let taskUpdated = false;
         let fileToDelete: ProjectFile | undefined;
         let taskTitle = '';
 
-        const updatedTasks = (data.tasks || []).map((task: Task) => {
-            if (task.id === taskId) {
-                taskTitle = task.title;
-                const originalFiles = task.files || [];
-                fileToDelete = originalFiles.find(f => f.id === fileId);
-                if (fileToDelete) {
-                    taskUpdated = true;
-                    return { ...task, files: originalFiles.filter(f => f.id !== fileId) };
-                }
-            }
-            return task;
-        });
+        const tasksFromDb = data.tasks || [];
+        const taskIndex = tasksFromDb.findIndex((t: any) => t.id === taskId);
+        if (taskIndex === -1) throw new Error("Task not found in project.");
 
-        if (!taskUpdated || !fileToDelete) throw new Error("File not found in task.");
-        
+        const taskToUpdate = tasksFromDb[taskIndex];
+        taskTitle = taskToUpdate.title;
+        const originalFiles = taskToUpdate.files || [];
+        fileToDelete = originalFiles.find((f: any) => f.id === fileId);
+
+        if (!fileToDelete) throw new Error("File not found in task.");
+
+        taskToUpdate.files = originalFiles.filter((f: any) => f.id !== fileId);
+
         const fileRef = adminStorage.bucket().file(`projects/${projectId}/tasks/${taskId}/${fileId}-${fileToDelete.name}`);
         await fileRef.delete({ ignoreNotFound: true });
         
-        const normalizedTasks = normalizeTasksArray(updatedTasks);
+        const normalizedTasks = normalizeTasksArrayForWrite(tasksFromDb);
         await ref.update({ tasks: normalizedTasks, updatedAt: FieldValue.serverTimestamp() });
         
         await logActivity(data.companyId, `${actorName} deleted file "${fileToDelete.name}" from task "${taskTitle}" in project "${data.title}".`);
