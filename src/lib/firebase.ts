@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp, type FirebaseOptions } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 // Your web app's Firebase configuration is stored in environment variables for security.
 const firebaseConfig: FirebaseOptions = {
@@ -17,5 +18,7 @@ const firebaseConfig: FirebaseOptions = {
 const app = firebaseConfig.apiKey ? (!getApps().length ? initializeApp(firebaseConfig) : getApp()) : null;
 const auth = app ? getAuth(app) : null;
 const db = app ? getFirestore(app) : null;
+const storage = app ? getStorage(app) : null;
 
-export { app, auth, db };
+
+export { app, auth, db, storage };

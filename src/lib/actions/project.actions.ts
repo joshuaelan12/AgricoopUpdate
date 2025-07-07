@@ -1,7 +1,7 @@
 'use server';
 
 import { z } from 'zod';
-import { adminDb, FieldValue } from '@/lib/firebase-admin';
+import { adminDb, FieldValue, adminStorage } from '@/lib/firebase-admin';
 import { revalidatePath } from 'next/cache';
 import {
   CreateProjectInputSchema,
@@ -16,6 +16,10 @@ import {
   AddTaskInputSchema,
   UpdateTaskInputSchema,
   DeleteTaskInputSchema,
+  AddFileToProjectInputSchema,
+  DeleteFileFromProjectInputSchema,
+  AddFileToTaskInputSchema,
+  DeleteFileFromTaskInputSchema,
   type CreateProjectInput,
   type AddProjectCommentInput,
   type DeleteProjectCommentInput,
@@ -28,7 +32,12 @@ import {
   type AddTaskInput,
   type UpdateTaskInput,
   type DeleteTaskInput,
+  type AddFileToProjectInput,
+  type DeleteFileFromProjectInput,
+  type AddFileToTaskInput,
+  type DeleteFileFromTaskInput,
   type Task,
+  type ProjectFile,
 } from '@/lib/schemas';
 import { logActivity } from './activity.actions';
 import { createNotificationsForTeam } from './notification.actions';
@@ -61,7 +70,7 @@ export async function createProject(input: CreateProjectInput, actorName: string
             ...validatedInput,
             progress: 0,
             tasks: [],
-            team: [],
+            files: [],
             comments: [],
             outputs: [],
             allocatedResources: [],
@@ -131,6 +140,7 @@ export async function addTaskToProject(input: AddTaskInput, actorName: string) {
             assignedTo: taskData.assignedTo,
             deadline: taskData.deadline,
             status: 'To Do',
+            files: [],
         };
 
         const updatedTasks = [...(data.tasks || []), newTask];
@@ -271,6 +281,115 @@ export async function deleteProjectComment(input: DeleteProjectCommentInput) {
         return { success: false, error: error.message || "An unknown error occurred." };
     }
 }
+
+
+export async function addFileToProject(input: AddFileToProjectInput, actorName: string) {
+    try {
+        const { projectId, file, uploaderName } = AddFileToProjectInputSchema.parse(input);
+        const { ref, data } = await getProjectAndValidate(projectId);
+
+        const newFile: ProjectFile = { ...file, uploaderName, uploadedAt: new Date() };
+
+        await ref.update({ files: FieldValue.arrayUnion(newFile) });
+        await logActivity(data.companyId, `${actorName} uploaded file "${file.name}" to project "${data.title}".`);
+        revalidatePath('/projects');
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error adding file to project:", error);
+        return { success: false, error: error.message || "An unknown error occurred." };
+    }
+}
+
+export async function deleteFileFromProject(input: DeleteFileFromProjectInput, actorName: string) {
+    try {
+        const { projectId, fileId } = DeleteFileFromProjectInputSchema.parse(input);
+        const { ref, data } = await getProjectAndValidate(projectId);
+
+        const fileToDelete = (data.files || []).find((f: ProjectFile) => f.id === fileId);
+        if (!fileToDelete) throw new Error("File not found in project.");
+
+        const fileRef = adminStorage.bucket().file(`projects/${projectId}/${fileId}-${fileToDelete.name}`);
+        await fileRef.delete({ ignoreNotFound: true });
+
+        await ref.update({ files: FieldValue.arrayRemove(fileToDelete) });
+        await logActivity(data.companyId, `${actorName} deleted file "${fileToDelete.name}" from project "${data.title}".`);
+        revalidatePath('/projects');
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error deleting file from project:", error);
+        return { success: false, error: error.message || "An unknown error occurred." };
+    }
+}
+
+export async function addFileToTask(input: AddFileToTaskInput, actorName: string) {
+    try {
+        const { projectId, taskId, file, uploaderName } = AddFileToTaskInputSchema.parse(input);
+        const { ref, data } = await getProjectAndValidate(projectId);
+
+        let taskUpdated = false;
+        const newFile: ProjectFile = { ...file, uploaderName, uploadedAt: new Date() };
+        
+        const updatedTasks = (data.tasks || []).map((task: Task) => {
+            if (task.id === taskId) {
+                taskUpdated = true;
+                const taskFiles = task.files || [];
+                return { ...task, files: [...taskFiles, newFile] };
+            }
+            return task;
+        });
+
+        if (!taskUpdated) throw new Error("Task not found in project.");
+
+        await ref.update({ tasks: updatedTasks, updatedAt: FieldValue.serverTimestamp() });
+
+        const task = updatedTasks.find(t => t.id === taskId);
+        await logActivity(data.companyId, `${actorName} uploaded file "${file.name}" to task "${task.title}" in project "${data.title}".`);
+        revalidatePath('/projects');
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error adding file to task:", error);
+        return { success: false, error: error.message || "An unknown error occurred." };
+    }
+}
+
+export async function deleteFileFromTask(input: DeleteFileFromTaskInput, actorName: string) {
+    try {
+        const { projectId, taskId, fileId } = DeleteFileFromTaskInputSchema.parse(input);
+        const { ref, data } = await getProjectAndValidate(projectId);
+
+        let taskUpdated = false;
+        let fileToDelete: ProjectFile | undefined;
+        let taskTitle = '';
+
+        const updatedTasks = (data.tasks || []).map((task: Task) => {
+            if (task.id === taskId) {
+                taskTitle = task.title;
+                const originalFiles = task.files || [];
+                fileToDelete = originalFiles.find(f => f.id === fileId);
+                if (fileToDelete) {
+                    taskUpdated = true;
+                    return { ...task, files: originalFiles.filter(f => f.id !== fileId) };
+                }
+            }
+            return task;
+        });
+
+        if (!taskUpdated || !fileToDelete) throw new Error("File not found in task.");
+        
+        const fileRef = adminStorage.bucket().file(`projects/${projectId}/tasks/${taskId}/${fileId}-${fileToDelete.name}`);
+        await fileRef.delete({ ignoreNotFound: true });
+        
+        await ref.update({ tasks: updatedTasks, updatedAt: FieldValue.serverTimestamp() });
+        
+        await logActivity(data.companyId, `${actorName} deleted file "${fileToDelete.name}" from task "${taskTitle}" in project "${data.title}".`);
+        revalidatePath('/projects');
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error deleting file from task:", error);
+        return { success: false, error: error.message || "An unknown error occurred." };
+    }
+}
+
 
 // --- OTHER ACTIONS (UNCHANGED BUT KEEPING FOR CONTEXT) ---
 
