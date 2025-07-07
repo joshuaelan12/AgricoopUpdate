@@ -69,6 +69,7 @@ export async function createProject(input: CreateProjectInput, actorName: string
         await newProjectRef.set({
             ...validatedInput,
             progress: 0,
+            team: [],
             tasks: [],
             files: [],
             comments: [],
@@ -390,9 +391,6 @@ export async function deleteFileFromTask(input: DeleteFileFromTaskInput, actorNa
     }
 }
 
-
-// --- OTHER ACTIONS (UNCHANGED BUT KEEPING FOR CONTEXT) ---
-
 export async function addProjectOutput(input: AddProjectOutputInput, actorName: string) {
     try {
         const { projectId, description, quantity, unit } = AddProjectOutputInputSchema.parse(input);
@@ -437,7 +435,7 @@ export async function allocateResourceToProject(input: AllocateResourceInput, ac
         const projectRef = adminDb.collection('projects').doc(projectId);
         const resourceRef = adminDb.collection('resources').doc(resourceId);
 
-        let resourceName = "Unknown Resource", projectName = "Unknown Project", companyId = "";
+        let resourceName = "Unknown Resource", projectName = "Unknown Project", companyId = "", resourceUnit = "units";
 
         await adminDb.runTransaction(async (transaction) => {
             const resourceDoc = await transaction.get(resourceRef);
@@ -449,18 +447,22 @@ export async function allocateResourceToProject(input: AllocateResourceInput, ac
             const resourceData = resourceDoc.data()!;
             const projectData = projectDoc.data()!;
             
-            resourceName = resourceData.name; projectName = projectData.title; companyId = projectData.companyId;
+            resourceName = resourceData.name; 
+            projectName = projectData.title; 
+            companyId = projectData.companyId;
+            resourceUnit = resourceData.unit;
 
-            if (resourceData.quantity < quantity) throw new Error(`Not enough stock for ${resourceData.name}. Available: ${resourceData.quantity} kg.`);
+            if (resourceData.quantity < quantity) throw new Error(`Not enough stock for ${resourceData.name}. Available: ${resourceData.quantity} ${resourceUnit}.`);
             if ((projectData.allocatedResources || []).some((r: any) => r.resourceId === resourceId)) throw new Error(`${resourceData.name} is already allocated. Please remove it first to adjust.`);
 
             transaction.update(resourceRef, { quantity: FieldValue.increment(-quantity) });
-            transaction.update(projectRef, { allocatedResources: FieldValue.arrayUnion({ resourceId, name: resourceData.name, quantity }) });
+            transaction.update(projectRef, { allocatedResources: FieldValue.arrayUnion({ resourceId, name: resourceData.name, quantity, unit: resourceUnit }) });
         });
         
-        await logActivity(companyId, `${actorName} allocated ${quantity}kg of ${resourceName} to project "${projectName}".`);
-        revalidatePath('/planning');
+        await logActivity(companyId, `${actorName} allocated ${quantity} ${resourceUnit} of ${resourceName} to project "${projectName}".`);
+        revalidatePath('/projects');
         revalidatePath('/resources');
+        revalidatePath('/');
 
         return { success: true };
     } catch (error: any) {
@@ -492,11 +494,12 @@ export async function deallocateResourceFromProject(input: DeallocateResourceInp
         });
         
         if (resourceToDeallocate) {
-          await logActivity(companyId, `${actorName} deallocated ${resourceToDeallocate.name} from project "${projectName}".`);
+          await logActivity(companyId, `${actorName} deallocated ${resourceToDeallocate.quantity} ${resourceToDeallocate.unit} of ${resourceToDeallocate.name} from project "${projectName}".`);
         }
 
-        revalidatePath('/planning');
+        revalidatePath('/projects');
         revalidatePath('/resources');
+        revalidatePath('/');
         
         return { success: true };
     } catch (error: any) {

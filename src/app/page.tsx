@@ -27,6 +27,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { CheckCircle2 } from 'lucide-react';
+import type { AllocatedResource, Project, Task } from '@/lib/schemas';
 
 
 // --- DATA INTERFACES ---
@@ -35,33 +36,6 @@ interface DashboardStats {
   activeMembers: number;
   resourceAlerts: number;
   lowStockItems: string[];
-}
-
-type ProjectStatus = "Planning" | "In Progress" | "On Hold" | "Delayed" | "Completed";
-
-interface AllocatedResource {
-  resourceId: string;
-  name: string;
-  quantity: number;
-}
-
-type TaskStatus = 'To Do' | 'In Progress' | 'Completed';
-
-interface Task {
-  id: string;
-  title: string;
-  assignedTo: string[];
-  deadline: Date | null;
-  status: TaskStatus;
-}
-
-interface Project {
-  id: string;
-  title: string;
-  status: ProjectStatus;
-  progress: number;
-  allocatedResources: AllocatedResource[];
-  tasks: Task[];
 }
 
 interface ResourceData {
@@ -123,10 +97,12 @@ export default function Dashboard() {
                 ...task,
                 deadline: task.deadline?.toDate() ?? null,
             }));
+            const allocatedResources = (data.allocatedResources || []).map((r: any) => r);
             return {
                 id: doc.id,
                 ...data,
                 tasks,
+                allocatedResources,
             }
         }) as Project[];
 
@@ -157,7 +133,7 @@ export default function Dashboard() {
         const summary: { [name: string]: number } = {};
         allProjects.forEach(project => {
             if (project.allocatedResources && Array.isArray(project.allocatedResources)) {
-                project.allocatedResources.forEach(resource => {
+                project.allocatedResources.forEach((resource: AllocatedResource) => {
                     if (summary[resource.name]) {
                         summary[resource.name] += resource.quantity;
                     } else {
@@ -336,7 +312,7 @@ export default function Dashboard() {
                         labelStyle={{ color: "hsl(var(--foreground))" }}
                         cursor={{fill: 'hsl(var(--muted))'}}
                       />
-                      <Bar dataKey="allocated" fill="hsl(var(--primary))" name="Allocated (kg)" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="allocated" fill="hsl(var(--primary))" name="Allocated" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
               ) : (
