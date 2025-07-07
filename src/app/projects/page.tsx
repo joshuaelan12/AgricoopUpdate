@@ -1,18 +1,18 @@
-
 'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { db } from "@/lib/firebase";
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { format } from "date-fns";
 
-import { createProject, updateProjectProgress, addProjectComment, deleteProjectComment, updateProject, deleteProject, updateProjectStatus } from "@/lib/actions/project.actions";
-import { CreateProjectInputSchema, AddProjectCommentInputSchema, UpdateProjectInputSchema } from "@/lib/schemas";
-import type { AddProjectCommentInput, UpdateProjectInput } from "@/lib/schemas";
+import { createProject, addProjectComment, deleteProjectComment, updateProject, deleteProject, addTaskToProject, updateTask, deleteTask } from "@/lib/actions/project.actions";
+import { CreateProjectInputSchema, UpdateProjectInputSchema, AddProjectCommentInputSchema, AddTaskInputSchema, UpdateTaskInputSchema } from "@/lib/schemas";
+import type { Project, Task, UserData, Comment, AddProjectCommentInput, UpdateProjectInput, AddTaskInput, UpdateTaskInput } from "@/lib/schemas";
 import { useToast } from "@/hooks/use-toast";
 
 import {
@@ -60,44 +60,16 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuCheckboxItem, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
-import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 
-import { FolderKanban, PlusCircle, Users as UsersIcon, ChevronDown, Loader2, MessageSquare, Trash2, MoreVertical, Edit } from "lucide-react";
+import { FolderKanban, PlusCircle, Users as UsersIcon, Loader2, MessageSquare, Trash2, MoreVertical, Edit, CalendarIcon, Check, GripVertical, Grip, ChevronDown, ListTodo } from "lucide-react";
 
-
-// --- DATA INTERFACES ---
-interface Comment {
-  id: string;
-  text: string;
-  authorId: string;
-  authorName: string;
-  createdAt: Date;
-}
-
-interface Project {
-  id: string;
-  title: string;
-  status: "In Progress" | "On Hold" | "Completed" | "Planning" | "Delayed";
-  description: string;
-  progress: number;
-  team: string[]; // Array of user UIDs
-  companyId: string;
-  comments: Comment[];
-  objectives?: string;
-  expectedOutcomes?: string;
-  priority?: 'Low' | 'Medium' | 'High';
-  deadline?: any; // Firestore timestamp, will be converted to Date
-  estimatedBudget?: number;
-}
-
-interface UserData {
-  uid: string;
-  displayName: string;
-}
-
-// --- HELPER FUNCTIONS ---
+// --- HELPER FUNCTIONS & CONSTANTS ---
 const getInitials = (name: string | undefined) => {
     if (!name) return '?';
     const names = name.split(' ');
@@ -105,7 +77,7 @@ const getInitials = (name: string | undefined) => {
         return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
     }
     return name.substring(0, 2).toUpperCase();
-}
+};
 
 const statusColors: { [key: string]: string } = {
   "In Progress": "bg-blue-500",
@@ -116,6 +88,14 @@ const statusColors: { [key: string]: string } = {
 };
 
 const projectStatuses: Project['status'][] = ["Planning", "In Progress", "On Hold", "Delayed", "Completed"];
+const priorities: Project['priority'][] = ['Low', 'Medium', 'High'];
+const taskStatuses: Task['status'][] = ['To Do', 'In Progress', 'Completed'];
+
+const currencyFormatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 0,
+});
 
 // --- SKELETON COMPONENT ---
 const ProjectCardSkeleton = () => (
@@ -147,16 +127,9 @@ const ProjectCardSkeleton = () => (
   </Card>
 );
 
-// --- CREATE PROJECT DIALOG COMPONENT ---
-type CreateProjectDialogProps = {
-  users: UserData[];
-  companyId: string;
-  actorName: string;
-};
-
-function CreateProjectDialog({ users, companyId, actorName }: CreateProjectDialogProps) {
+// --- CREATE PROJECT DIALOG ---
+function CreateProjectDialog({ actor, onActionComplete }: { actor: { uid: string, displayName: string, companyId: string }, onActionComplete: () => void }) {
   const [open, setOpen] = useState(false);
-  const router = useRouter();
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof CreateProjectInputSchema>>({
@@ -165,13 +138,15 @@ function CreateProjectDialog({ users, companyId, actorName }: CreateProjectDialo
       title: "",
       description: "",
       status: "Planning",
-      team: [],
-      companyId: companyId,
+      companyId: actor.companyId,
+      priority: 'Medium',
+      deadline: null,
+      estimatedBudget: 0,
     },
   });
 
   const onSubmit = async (values: z.infer<typeof CreateProjectInputSchema>) => {
-    const result = await createProject(values, actorName);
+    const result = await createProject(values, actor.displayName);
     if (result.success) {
       toast({
         title: "Project Created",
@@ -179,7 +154,7 @@ function CreateProjectDialog({ users, companyId, actorName }: CreateProjectDialo
       });
       form.reset();
       setOpen(false);
-      router.refresh();
+      onActionComplete();
     } else {
       toast({
         variant: "destructive",
@@ -207,66 +182,27 @@ function CreateProjectDialog({ users, companyId, actorName }: CreateProjectDialo
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField control={form.control} name="title" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Project Title</FormLabel>
-                <FormControl><Input placeholder="e.g., Spring Planting Initiative" {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
+              <FormItem><FormLabel>Project Title</FormLabel><FormControl><Input placeholder="e.g., Spring Planting Initiative" {...field} /></FormControl><FormMessage /></FormItem>
             )}/>
             <FormField control={form.control} name="description" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Description</FormLabel>
-                <FormControl><Textarea placeholder="Describe the project's goals and scope." {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
+              <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea placeholder="Describe the project's goals and scope." {...field} /></FormControl><FormMessage /></FormItem>
             )}/>
             <div className="grid grid-cols-2 gap-4">
               <FormField control={form.control} name="status" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Status</FormLabel>
-                   <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Select a status" /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      {projectStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
+                <FormItem><FormLabel>Status</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{projectStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
               )}/>
-              <FormField control={form.control} name="team" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Assign Team</FormLabel>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <FormControl>
-                        <Button variant="outline" className="w-full justify-between">
-                         {field.value?.length > 0 ? `${field.value.length} selected` : "Select team members"}
-                         <ChevronDown className="h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-56">
-                      <DropdownMenuLabel>Available Members</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      {users.map(user => (
-                         <DropdownMenuCheckboxItem
-                          key={user.uid}
-                          checked={field.value?.includes(user.uid)}
-                          onCheckedChange={(checked) => {
-                            return checked
-                              ? field.onChange([...field.value, user.uid])
-                              : field.onChange(field.value?.filter(id => id !== user.uid))
-                          }}
-                        >
-                          {user.displayName}
-                        </DropdownMenuCheckboxItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <FormMessage />
-                </FormItem>
+               <FormField control={form.control} name="priority" render={({ field }) => (
+                <FormItem><FormLabel>Priority</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{priorities.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
               )}/>
             </div>
+             <div className="grid grid-cols-2 gap-4">
+                <FormField control={form.control} name="deadline" render={({ field }) => (
+                <FormItem className="flex flex-col"><FormLabel>Deadline</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("pl-3 text-left font-normal",!field.value && "text-muted-foreground")}>{field.value ? format(field.value, "PPP") : (<span>Pick a date</span>)}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(date) => date < new Date("1900-01-01")} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>
+              )}/>
+              <FormField control={form.control} name="estimatedBudget" render={({ field }) => (
+                <FormItem><FormLabel>Est. Budget ($)</FormLabel><FormControl><Input type="number" placeholder="5000" {...field} /></FormControl><FormMessage /></FormItem>
+              )}/>
+             </div>
             <DialogFooter>
                <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
               <Button type="submit" disabled={form.formState.isSubmitting}>
@@ -281,76 +217,85 @@ function CreateProjectDialog({ users, companyId, actorName }: CreateProjectDialo
   )
 }
 
-// --- PROJECT ACTIONS (EDIT/DELETE) COMPONENT ---
-function EditProjectDialog({ project, actorName, onActionComplete }: { project: Project, actorName: string, onActionComplete: () => void }) {
+// --- TASK MANAGEMENT DIALOGS ---
+function AddOrEditTaskDialog({ mode, project, task, users, actor, onActionComplete }: { mode: 'add' | 'edit', project: Project, task?: Task, users: UserData[], actor: { uid: string, displayName: string }, onActionComplete: () => void }) {
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
-  
-  const form = useForm<UpdateProjectInput>({
-    resolver: zodResolver(UpdateProjectInputSchema),
-    defaultValues: {
-      projectId: project.id,
-      title: project.title,
-      description: project.description,
+  const isEdit = mode === 'edit';
+
+  const formSchema = isEdit ? UpdateTaskInputSchema : AddTaskInputSchema;
+  type FormSchemaType = z.infer<typeof formSchema>;
+
+  const form = useForm<FormSchemaType>({
+    resolver: zodResolver(formSchema),
+    defaultValues: isEdit && task ? {
+        projectId: project.id,
+        taskId: task.id,
+        title: task.title,
+        assignedTo: task.assignedTo,
+        deadline: task.deadline ? new Date(task.deadline) : null,
+        status: task.status,
+    } : {
+        projectId: project.id,
+        title: "",
+        assignedTo: [],
+        deadline: null,
     },
   });
 
-  const onSubmit = async (values: UpdateProjectInput) => {
-    const result = await updateProject(values, actorName);
+  const onSubmit = async (values: FormSchemaType) => {
+    const result = isEdit 
+      ? await updateTask(values as UpdateTaskInput, actor.displayName) 
+      : await addTaskToProject(values as AddTaskInput, actor.displayName);
+      
     if (result.success) {
-      toast({
-        title: "Project Updated",
-        description: `"${values.title}" has been successfully updated.`,
-      });
+      toast({ title: `Task ${isEdit ? 'Updated' : 'Added'}` });
+      form.reset();
       setOpen(false);
       onActionComplete();
     } else {
-      toast({
-        variant: "destructive",
-        title: "Update Failed",
-        description: result.error || "An unexpected error occurred.",
-      });
+      toast({ variant: "destructive", title: "Action Failed", description: result.error });
     }
   };
 
+  const triggerButton = isEdit ? (
+    <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+      <Edit className="mr-2 h-4 w-4" /> Edit Task
+    </DropdownMenuItem>
+  ) : (
+    <Button size="sm"><PlusCircle className="mr-2 h-4 w-4" />Add Task</Button>
+  );
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-            <Edit className="mr-2 h-4 w-4" />
-            <span>Edit Project</span>
-        </DropdownMenuItem>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogTrigger asChild>{triggerButton}</DialogTrigger>
+      <DialogContent>
         <DialogHeader>
-          <DialogTitle className="font-headline text-2xl">Edit Project</DialogTitle>
-          <DialogDescription>
-            Make changes to your project here. Click save when you're done.
-          </DialogDescription>
+          <DialogTitle className="font-headline text-2xl">{isEdit ? 'Edit Task' : 'Add New Task'}</DialogTitle>
+          <DialogDescription>For project: {project.title}</DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField control={form.control} name="title" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Project Title</FormLabel>
-                <FormControl><Input placeholder="e.g., Spring Planting Initiative" {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
+              <FormItem><FormLabel>Task Title</FormLabel><FormControl><Input placeholder="e.g., Prepare soil for planting" {...field} /></FormControl><FormMessage /></FormItem>
             )}/>
-            <FormField control={form.control} name="description" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Description</FormLabel>
-                <FormControl><Textarea placeholder="Describe the project's goals and scope." {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )}/>
-            <DialogFooter>
-               <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
-              <Button type="submit" disabled={form.formState.isSubmitting}>
-                 {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Save Changes
-              </Button>
-            </DialogFooter>
+             <div className="grid grid-cols-2 gap-4">
+               <FormField control={form.control} name="assignedTo" render={({ field }) => (
+                <FormItem><FormLabel>Assign To</FormLabel><DropdownMenu><DropdownMenuTrigger asChild><FormControl><Button variant="outline" className="w-full justify-between">{field.value?.length > 0 ? `${field.value.length} selected` : "Select members"}<ChevronDown className="h-4 w-4 opacity-50" /></Button></FormControl></DropdownMenuTrigger><DropdownMenuContent className="w-56"><DropdownMenuLabel>Available Members</DropdownMenuLabel><DropdownMenuSeparator />{users.map(user => (<DropdownMenuCheckboxItem key={user.uid} checked={field.value?.includes(user.uid)} onCheckedChange={(checked) => {return checked ? field.onChange([...(field.value || []), user.uid]) : field.onChange(field.value?.filter(id => id !== user.uid))}}>{user.displayName}</DropdownMenuCheckboxItem>))}</DropdownMenuContent></DropdownMenu><FormMessage /></FormItem>
+               )}/>
+               <FormField control={form.control} name="deadline" render={({ field }) => (
+                <FormItem className="flex flex-col"><FormLabel>Deadline</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("pl-3 text-left font-normal",!field.value && "text-muted-foreground")}>{field.value ? format(field.value, "PPP") : (<span>Pick a date</span>)}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(date) => date < new Date("1900-01-01")} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>
+               )}/>
+             </div>
+             {isEdit && (
+                <FormField control={form.control} name="status" render={({ field }) => (
+                    <FormItem><FormLabel>Status</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+                )}/>
+             )}
+             <DialogFooter>
+                <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
+                <Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{isEdit ? 'Save Changes' : 'Add Task'}</Button>
+             </DialogFooter>
           </form>
         </Form>
       </DialogContent>
@@ -358,384 +303,175 @@ function EditProjectDialog({ project, actorName, onActionComplete }: { project: 
   );
 }
 
-function ProjectActions({ project, actorName, onActionComplete }: { project: Project; actorName: string; onActionComplete: () => void }) {
+// --- PROJECT DETAILS DIALOG ---
+function ProjectDetailsDialog({ project, users, currentUser, onActionComplete }: { project: Project, users: { [uid: string]: UserData }, currentUser: {uid: string, displayName: string, role: string}, onActionComplete: () => void }) {
   const { toast } = useToast();
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeletingTask, setIsDeletingTask] = useState<string | null>(null);
+  const [newComment, setNewComment] = useState('');
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [isDeletingComment, setIsDeletingComment] = useState<string | null>(null);
+  const isManager = currentUser.role === 'Admin' || currentUser.role === 'Project Manager';
 
-  const handleDelete = async () => {
-    setIsDeleting(true);
-    const result = await deleteProject({ projectId: project.id }, actorName);
+  const handleTaskStatusChange = async (taskId: string, newStatus: Task['status']) => {
+    const result = await updateTask({ projectId: project.id, taskId, status: newStatus }, currentUser.displayName);
     if (result.success) {
-      toast({
-        title: "Project Deleted",
-        description: `"${project.title}" has been successfully deleted.`,
-      });
+      toast({ title: "Task Status Updated" });
       onActionComplete();
     } else {
-      toast({
-        variant: "destructive",
-        title: "Deletion Failed",
-        description: result.error || "An unexpected error occurred.",
-      });
+      toast({ variant: "destructive", title: "Update Failed", description: result.error });
     }
-    setIsDeleting(false);
   };
 
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0">
-          <MoreVertical className="h-4 w-4" />
-          <span className="sr-only">More options</span>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <EditProjectDialog project={project} actorName={actorName} onActionComplete={onActionComplete} />
-        <DropdownMenuSeparator />
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-             <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive">
-                <Trash2 className="mr-2 h-4 w-4" />
-                <span>Delete Project</span>
-             </DropdownMenuItem>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This action cannot be undone. This will permanently delete the project and all associated data.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDelete} disabled={isDeleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-
-// --- MAIN COMPONENT ---
-export default function ProjectsPage() {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const router = useRouter();
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [users, setUsers] = useState<{ [uid: string]: UserData }>({});
-  const [loading, setLoading] = useState(true);
-  const [updatingProgressId, setUpdatingProgressId] = useState<string | null>(null);
-  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
-  const [liveProgress, setLiveProgress] = useState<{ [projectId: string]: number }>({});
-  const [newComments, setNewComments] = useState<{ [key: string]: string }>({});
-  const [isSubmittingComment, setIsSubmittingComment] = useState<string | null>(null);
-  const [isDeletingComment, setIsDeletingComment] = useState<string | null>(null);
-
-
-  useEffect(() => {
-    const fetchProjectData = async () => {
-      if (!user?.companyId) {
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
-      setLiveProgress({}); // Reset live progress on new fetch
-      try {
-        const { companyId } = user;
-        const projectsRef = collection(db, 'projects');
-        const usersRef = collection(db, 'users');
-
-        const projectsQuery = query(projectsRef, where('companyId', '==', companyId));
-        const usersQuery = query(usersRef, where('companyId', '==', companyId));
-
-        const [projectsSnap, usersSnap] = await Promise.all([
-          getDocs(projectsQuery),
-          getDocs(usersQuery),
-        ]);
-
-        const projectsData = projectsSnap.docs.map(doc => {
-            const data = doc.data();
-            const comments = (data.comments || []).map((comment: any) => ({
-                ...comment,
-                createdAt: comment.createdAt?.toDate(), // Safely convert timestamp
-            })).filter((c: Comment) => c.createdAt); // Filter out any comments that failed to convert
-            return { id: doc.id, ...data, comments };
-        }) as Project[];
-        
-        const usersData = usersSnap.docs.reduce((acc, doc) => {
-          acc[doc.id] = { uid: doc.id, ...(doc.data() as Omit<UserData, 'uid'>) };
-          return acc;
-        }, {} as { [uid: string]: UserData });
-
-        setProjects(projectsData);
-        setUsers(usersData);
-
-      } catch (error) {
-        console.error("Error fetching project data:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProjectData();
-  }, [user]);
-
-  const handleAddComment = async (e: React.FormEvent, projectId: string) => {
-      e.preventDefault();
-      if (!user || !newComments[projectId]?.trim()) return;
-
-      setIsSubmittingComment(projectId);
-      const commentText = newComments[projectId];
-
-      const input: AddProjectCommentInput = {
-          projectId,
-          commentText,
-          userId: user.uid,
-          userName: user.displayName || 'Anonymous',
-      };
-      
-      const result = await addProjectComment(input);
-
-      if (result.success) {
-          setNewComments(prev => ({...prev, [projectId]: ''}));
-          toast({
-              title: "Comment Added",
-              description: "Your comment has been posted.",
-          });
-          router.refresh();
-      } else {
-          toast({
-              variant: "destructive",
-              title: "Failed to post comment",
-              description: result.error || "An unknown error occurred.",
-          });
-      }
-      setIsSubmittingComment(null);
-  };
-
-  const handleDeleteComment = async (projectId: string, commentId: string) => {
-    if (!user) return;
-
-    setIsDeletingComment(commentId);
-    const result = await deleteProjectComment({
-      projectId,
-      commentId,
-      userId: user.uid,
-    });
-
-    if (result.success) {
-      toast({
-        title: "Comment Deleted",
-      });
-      router.refresh();
+  const handleDeleteTask = async (taskId: string) => {
+    setIsDeletingTask(taskId);
+    const result = await deleteTask({ projectId: project.id, taskId }, currentUser.displayName);
+     if (result.success) {
+      toast({ title: "Task Deleted" });
+      onActionComplete();
     } else {
-      toast({
-        variant: "destructive",
-        title: "Failed to delete comment",
-        description: result.error || "An unknown error occurred.",
-      });
+      toast({ variant: "destructive", title: "Deletion Failed", description: result.error });
+    }
+    setIsDeletingTask(null);
+  }
+
+  const handleAddComment = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!newComment.trim()) return;
+      setIsSubmittingComment(true);
+      const input: AddProjectCommentInput = { projectId: project.id, commentText: newComment, userId: currentUser.uid, userName: currentUser.displayName };
+      const result = await addProjectComment(input);
+      if (result.success) {
+          setNewComment('');
+          toast({ title: "Comment Added" });
+          onActionComplete();
+      } else {
+          toast({ variant: "destructive", title: "Failed to post comment", description: result.error });
+      }
+      setIsSubmittingComment(false);
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    setIsDeletingComment(commentId);
+    const result = await deleteProjectComment({ projectId: project.id, commentId, userId: currentUser.uid });
+    if (result.success) {
+      toast({ title: "Comment Deleted" });
+      onActionComplete();
+    } else {
+      toast({ variant: "destructive", title: "Failed to delete comment", description: result.error });
     }
     setIsDeletingComment(null);
   };
-  
-  const handleStatusChange = async (projectId: string, newStatus: Project['status']) => {
-    if (!user) return;
-    setUpdatingStatusId(projectId);
-    const result = await updateProjectStatus({
-        projectId: projectId,
-        status: newStatus,
-    }, user.displayName);
 
-    if (result.success) {
-        toast({ title: "Status Updated" });
-        router.refresh();
-    } else {
-        toast({
-            variant: "destructive",
-            title: "Update Failed",
-            description: result.error,
-        });
-    }
-    setUpdatingStatusId(null);
-  };
+  const sortedComments = useMemo(() => {
+    return (project.comments || []).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [project.comments]);
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-4xl font-headline text-foreground">Projects</h1>
-          <p className="text-muted-foreground">
-            Browse and manage all projects within your cooperative.
-          </p>
-        </div>
-         {user && (user.role === 'Admin' || user.role === 'Project Manager') && !loading && (
-          <CreateProjectDialog 
-            users={Object.values(users)} 
-            companyId={user.companyId}
-            actorName={user.displayName}
-          />
-        )}
-      </div>
-
-      {loading && (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {[...Array(3)].map((_, i) => <ProjectCardSkeleton key={i} />)}
-        </div>
-      )}
-
-      {!loading && projects.length === 0 && (
-         <Card className="mt-8">
-            <CardContent className="flex flex-col items-center justify-center p-12 text-center">
-              <FolderKanban className="h-16 w-16 text-muted-foreground mb-4" />
-              <h2 className="text-2xl font-headline">No Projects Yet</h2>
-              <p className="text-muted-foreground">
-                Get started by creating your first project.
-              </p>
-            </CardContent>
-          </Card>
-      )}
-
-      {!loading && projects.length > 0 && (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {projects.map((project) => {
-            const canUpdate = user && project.team.includes(user.uid);
-            const isUpdating = updatingProgressId === project.id;
-            const displayProgress = liveProgress[project.id] ?? project.progress;
-
-            return (
-              <Card key={project.id} id={project.id} className="flex flex-col scroll-mt-24">
-                <CardHeader>
-                  <div className="flex justify-between items-start gap-4">
-                      <div className="flex-1">
-                        <CardTitle className="font-headline text-2xl">{project.title}</CardTitle>
-                        {canUpdate ? (
-                          <Select
-                            value={project.status}
-                            disabled={updatingStatusId === project.id}
-                            onValueChange={(newStatus: Project['status']) => handleStatusChange(project.id, newStatus)}
-                          >
-                            <SelectTrigger className="w-[180px] mt-1 h-9">
-                              <div className="flex items-center gap-2">
-                                {updatingStatusId === project.id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <span className={`h-2 w-2 rounded-full ${statusColors[project.status]}`} />
-                                )}
-                                <SelectValue />
-                              </div>
-                            </SelectTrigger>
-                            <SelectContent>
-                              {projectStatuses.map(s => (
-                                <SelectItem key={s} value={s}>
-                                  <div className="flex items-center gap-2">
-                                    <span className={`h-2 w-2 rounded-full ${statusColors[s]}`} />
-                                    {s}
-                                  </div>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <Badge className={`${statusColors[project.status]} text-primary-foreground mt-1`}>{project.status}</Badge>
-                        )}
-                      </div>
-                      {user?.role === 'Admin' && <ProjectActions project={project} actorName={user.displayName} onActionComplete={() => router.refresh()} />}
-                  </div>
-                  <CardDescription className="pt-2">{project.description}</CardDescription>
-                </CardHeader>
-                <CardContent className="flex-grow flex flex-col">
-                  <div className="flex-grow">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-medium text-muted-foreground">Progress</span>
-                      {isUpdating && <Loader2 className="h-4 w-4 animate-spin" />}
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">View Details</Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-4xl h-[90vh]">
+        <DialogHeader>
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle className="font-headline text-3xl">{project.title}</CardTitle>
+              <CardDescription className="mt-1">{project.description}</CardDescription>
+            </div>
+             <ProjectActions project={project} actorName={currentUser.displayName} onActionComplete={onActionComplete} />
+          </div>
+          <div className="flex items-center gap-4 pt-2 text-sm">
+            <Badge className={`${statusColors[project.status]} text-primary-foreground`}>{project.status}</Badge>
+            {project.deadline && <span>Deadline: {format(new Date(project.deadline), 'PP')}</span>}
+            {project.estimatedBudget && <span>Budget: {currencyFormatter.format(project.estimatedBudget)}</span>}
+          </div>
+        </DialogHeader>
+        
+        <Tabs defaultValue="tasks" className="flex-grow flex flex-col min-h-0">
+          <TabsList className="mt-4">
+            <TabsTrigger value="tasks">Tasks</TabsTrigger>
+            <TabsTrigger value="comments">Comments</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="tasks" className="flex-grow overflow-y-auto mt-0">
+              <Card className="mt-2 border-0 shadow-none">
+                <CardHeader className="flex flex-row items-center justify-between p-4">
+                    <div>
+                        <CardTitle className="text-xl font-headline">Task List</CardTitle>
+                        <CardDescription>Track and manage all tasks for this project.</CardDescription>
                     </div>
-                    {canUpdate ? (
-                      <Slider
-                        value={[displayProgress]}
-                        max={100}
-                        step={1}
-                        disabled={isUpdating}
-                        onValueChange={(value) => {
-                          setLiveProgress(prev => ({...prev, [project.id]: value[0]}))
-                        }}
-                        onValueCommit={async (value) => {
-                          if (!user) return;
-                          setUpdatingProgressId(project.id);
-                          const result = await updateProjectProgress({
-                            projectId: project.id,
-                            progress: value[0],
-                          }, user.displayName);
-                          if (!result.success) {
-                            toast({
-                              variant: "destructive",
-                              title: "Update Failed",
-                              description: result.error,
-                            });
-                             // On failure, revert the UI by removing the live progress value
-                            setLiveProgress(prev => {
-                                const newState = {...prev};
-                                delete newState[project.id];
-                                return newState;
-                            });
-                          }
-                          setUpdatingProgressId(null);
-                        }}
-                        className="my-2"
-                      />
+                    {isManager && <AddOrEditTaskDialog mode="add" project={project} users={Object.values(users)} actor={currentUser} onActionComplete={onActionComplete} />}
+                </CardHeader>
+                <CardContent className="p-4 space-y-2">
+                    {project.tasks?.length > 0 ? (
+                        project.tasks.map(task => {
+                            const canUpdateTask = isManager || task.assignedTo.includes(currentUser.uid);
+                            return (
+                                <div key={task.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50">
+                                    <div className="flex-grow">
+                                        <p className="font-medium">{task.title}</p>
+                                        <div className="flex items-center gap-x-3 text-xs text-muted-foreground">
+                                            {task.deadline && <span>Due: {format(new Date(task.deadline), 'PP')}</span>}
+                                            {task.assignedTo.length > 0 && (
+                                                <div className="flex items-center gap-1">
+                                                    <UsersIcon className="h-3 w-3" />
+                                                    {task.assignedTo.map(uid => users[uid]?.displayName).join(', ')}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                     <div className="flex items-center gap-2">
+                                        <Select value={task.status} onValueChange={(newStatus: Task['status']) => handleTaskStatusChange(task.id, newStatus)} disabled={!canUpdateTask}>
+                                            <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
+                                            <SelectContent><>{taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</>
+                                            </SelectContent>
+                                        </Select>
+                                        {isManager && (
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <AddOrEditTaskDialog mode="edit" project={project} task={task} users={Object.values(users)} actor={currentUser} onActionComplete={onActionComplete} />
+                                                    <DropdownMenuSeparator />
+                                                     <AlertDialog>
+                                                        <AlertDialogTrigger asChild><DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive"><Trash2 className="mr-2 h-4 w-4" /> Delete Task</DropdownMenuItem></AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete this task.</AlertDialogDescription></AlertDialogHeader>
+                                                            <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteTask(task.id)} disabled={isDeletingTask === task.id}>{isDeletingTask === task.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Delete</AlertDialogAction></AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        )}
+                                     </div>
+                                </div>
+                            )
+                        })
                     ) : (
-                      <Progress value={project.progress} className="mt-1 h-2" />
+                        <div className="text-center text-muted-foreground py-8"><ListTodo className="mx-auto h-12 w-12 mb-2" /><p>No tasks have been added yet.</p></div>
                     )}
-                    <span className="text-xs text-muted-foreground">{displayProgress}% complete</span>
-                  </div>
-
-                  <Separator className="my-4" />
-
-                  <div>
-                    <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
-                      <MessageSquare className="h-4 w-4" />
-                      Comments
-                    </h4>
-                    <div className="space-y-4 max-h-48 overflow-y-auto pr-2 mb-4">
-                      {project.comments?.length > 0 ? (
-                        project.comments
-                          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-                          .map((comment) => (
+                </CardContent>
+              </Card>
+          </TabsContent>
+          
+          <TabsContent value="comments" className="flex-grow overflow-y-auto mt-0">
+             <Card className="mt-2 border-0 shadow-none">
+                <CardHeader className="p-4">
+                    <CardTitle className="text-xl font-headline">Comments</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4">
+                     <div className="space-y-4 pr-2 mb-4">
+                      {sortedComments.length > 0 ? (
+                        sortedComments.map((comment) => (
                             <div key={comment.id} className="flex items-start gap-3">
-                              <Avatar className="h-8 w-8 border">
-                                <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
-                              </Avatar>
+                              <Avatar className="h-8 w-8 border"><AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback></Avatar>
                               <div className="w-full bg-muted/50 p-2 rounded-md">
                                 <div className="flex items-center justify-between">
                                   <p className="text-sm font-medium">{comment.authorName}</p>
-                                   {user?.uid === comment.authorId && (
-                                    <AlertDialog>
-                                      <AlertDialogTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-6 w-6">
-                                          <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                                        </Button>
-                                      </AlertDialogTrigger>
+                                   {currentUser.uid === comment.authorId && (
+                                    <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6"><Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" /></Button></AlertDialogTrigger>
                                       <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                          <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                          <AlertDialogDescription>
-                                            This will permanently delete this comment. This action cannot be undone.
-                                          </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                          <AlertDialogAction
-                                            onClick={() => handleDeleteComment(project.id, comment.id)}
-                                            disabled={isDeletingComment === comment.id}
-                                          >
-                                            {isDeletingComment === comment.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                            Delete
-                                          </AlertDialogAction>
-                                        </AlertDialogFooter>
+                                        <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete this comment.</AlertDialogDescription></AlertDialogHeader>
+                                        <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteComment(comment.id)} disabled={isDeletingComment === comment.id}>{isDeletingComment === comment.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Delete</AlertDialogAction></AlertDialogFooter>
                                       </AlertDialogContent>
                                     </AlertDialog>
                                   )}
@@ -748,47 +484,231 @@ export default function ProjectsPage() {
                         <p className="text-sm text-muted-foreground text-center py-4">No comments yet.</p>
                       )}
                     </div>
-
-                    {canUpdate && (
-                      <form onSubmit={(e) => handleAddComment(e, project.id)} className="flex items-start gap-2">
-                        <Avatar className="h-9 w-9 border">
-                          <AvatarFallback>{getInitials(user?.displayName)}</AvatarFallback>
-                        </Avatar>
+                     <form onSubmit={handleAddComment} className="flex items-start gap-2 pt-4 border-t">
+                        <Avatar className="h-9 w-9 border"><AvatarFallback>{getInitials(currentUser?.displayName)}</AvatarFallback></Avatar>
                         <div className="w-full">
-                          <Textarea
-                            placeholder="Add a comment..."
-                            value={newComments[project.id] || ''}
-                            onChange={(e) => setNewComments(prev => ({ ...prev, [project.id]: e.target.value }))}
-                            className="min-h-[40px] bg-background"
-                          />
-                          <Button 
-                            type="submit" 
-                            size="sm" 
-                            className="mt-2" 
-                            disabled={isSubmittingComment === project.id || !newComments[project.id]?.trim()}
-                          >
-                            {isSubmittingComment === project.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Post"}
+                          <Textarea placeholder="Add a comment..." value={newComment} onChange={(e) => setNewComment(e.target.value)} className="min-h-[40px] bg-background" />
+                          <Button type="submit" size="sm" className="mt-2" disabled={isSubmittingComment || !newComment.trim()}>
+                            {isSubmittingComment ? <Loader2 className="h-4 w-4 animate-spin" /> : "Post"}
                           </Button>
                         </div>
                       </form>
-                    )}
-                  </div>
                 </CardContent>
-                <CardFooter>
-                  <div className="flex items-center justify-between w-full">
-                    <span className="text-sm font-medium text-muted-foreground">Team</span>
-                    <div className="flex -space-x-2">
-                      {project.team.map((uid, i) => (
-                        <Avatar key={i} className="h-8 w-8 border-2 border-card">
-                          <AvatarFallback>{getInitials(users[uid]?.displayName)}</AvatarFallback>
-                        </Avatar>
-                      ))}
-                    </div>
+             </Card>
+          </TabsContent>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
+// --- EDIT/DELETE PROJECT ACTIONS ---
+function ProjectActions({ project, actorName, onActionComplete }: { project: Project; actorName: string; onActionComplete: () => void }) {
+  const { toast } = useToast();
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    const result = await deleteProject({ projectId: project.id }, actorName);
+    if (result.success) {
+      toast({ title: "Project Deleted" });
+      onActionComplete();
+    } else {
+      toast({ variant: "destructive", title: "Deletion Failed", description: result.error });
+    }
+    setIsDeleting(false);
+  };
+  
+   const form = useForm<UpdateProjectInput>({
+    resolver: zodResolver(UpdateProjectInputSchema),
+    defaultValues: {
+      projectId: project.id,
+      title: project.title,
+      description: project.description,
+      status: project.status,
+      priority: project.priority || 'Medium',
+      deadline: project.deadline ? new Date(project.deadline) : null,
+      estimatedBudget: project.estimatedBudget || 0,
+    },
+  });
+
+  const onEditSubmit = async (values: UpdateProjectInput) => {
+    const result = await updateProject(values, actorName);
+    if (result.success) {
+      toast({ title: "Project Updated" });
+      setIsEditOpen(false);
+      onActionComplete();
+    } else {
+      toast({ variant: "destructive", title: "Update Failed", description: result.error });
+    }
+  };
+
+
+  return (
+    <>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0"><MoreVertical className="h-4 w-4" /><span className="sr-only">More options</span></Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={() => setIsEditOpen(true)}><Edit className="mr-2 h-4 w-4" /><span>Edit Project</span></DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+             <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive"><Trash2 className="mr-2 h-4 w-4" /><span>Delete Project</span></DropdownMenuItem>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This action will permanently delete the project and all associated data.</AlertDialogDescription></AlertDialogHeader>
+            <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDelete} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">{isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Delete</AlertDialogAction></AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </DropdownMenuContent>
+    </DropdownMenu>
+    
+    <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+        <DialogHeader><DialogTitle className="font-headline text-2xl">Edit Project</DialogTitle><DialogDescription>Make changes to your project here. Click save when you're done.</DialogDescription></DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onEditSubmit)} className="space-y-4">
+            <FormField control={form.control} name="title" render={({ field }) => (
+              <FormItem><FormLabel>Project Title</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+            )}/>
+            <FormField control={form.control} name="description" render={({ field }) => (
+              <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
+            )}/>
+             <div className="grid grid-cols-2 gap-4">
+              <FormField control={form.control} name="status" render={({ field }) => (
+                <FormItem><FormLabel>Status</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{projectStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+              )}/>
+               <FormField control={form.control} name="priority" render={({ field }) => (
+                <FormItem><FormLabel>Priority</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{priorities.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+              )}/>
+            </div>
+             <div className="grid grid-cols-2 gap-4">
+                <FormField control={form.control} name="deadline" render={({ field }) => (
+                <FormItem className="flex flex-col"><FormLabel>Deadline</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("pl-3 text-left font-normal",!field.value && "text-muted-foreground")}>{field.value ? format(field.value, "PPP") : (<span>Pick a date</span>)}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>
+              )}/>
+              <FormField control={form.control} name="estimatedBudget" render={({ field }) => (
+                <FormItem><FormLabel>Est. Budget ($)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+              )}/>
+             </div>
+            <DialogFooter>
+               <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
+              <Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save Changes</Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+    </>
+  );
+}
+
+
+// --- MAIN PAGE COMPONENT ---
+export default function ProjectsPage() {
+  const { user } = useAuth();
+  const router = useRouter();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [users, setUsers] = useState<{ [uid: string]: UserData }>({});
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = async () => {
+      if (!user?.companyId) {
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      try {
+        const { companyId } = user;
+        const projectsRef = collection(db, 'projects');
+        const usersRef = collection(db, 'users');
+        const projectsQuery = query(projectsRef, where('companyId', '==', companyId));
+        const usersQuery = query(usersRef, where('companyId', '==', companyId));
+        const [projectsSnap, usersSnap] = await Promise.all([ getDocs(projectsQuery), getDocs(usersQuery) ]);
+
+        const projectsData = projectsSnap.docs.map(doc => {
+            const data = doc.data();
+            const comments = (data.comments || []).map((comment: any) => ({ ...comment, createdAt: comment.createdAt?.toDate() })).filter((c: Comment) => c.createdAt);
+            const tasks = (data.tasks || []).map((task: any) => ({ ...task, deadline: task.deadline?.toDate() })).filter((t: Task) => t.id);
+            return { id: doc.id, ...data, comments, tasks } as Project;
+        });
+        
+        const usersData = usersSnap.docs.reduce((acc, doc) => {
+          acc[doc.id] = { uid: doc.id, ...(doc.data() as Omit<UserData, 'uid'>) };
+          return acc;
+        }, {} as { [uid: string]: UserData });
+
+        setProjects(projectsData);
+        setUsers(usersData);
+      } catch (error) {
+        console.error("Error fetching project data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+  
+  useEffect(() => {
+    fetchData();
+  }, [user]);
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-4xl font-headline text-foreground">Projects</h1>
+          <p className="text-muted-foreground">Browse and manage all projects within your cooperative.</p>
+        </div>
+         {user && (user.role === 'Admin' || user.role === 'Project Manager') && !loading && (
+          <CreateProjectDialog actor={user} onActionComplete={fetchData} />
+        )}
+      </div>
+
+      {loading && (<div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">{[...Array(3)].map((_, i) => <ProjectCardSkeleton key={i} />)}</div>)}
+
+      {!loading && projects.length === 0 && (
+         <Card className="mt-8">
+            <CardContent className="flex flex-col items-center justify-center p-12 text-center">
+              <FolderKanban className="h-16 w-16 text-muted-foreground mb-4" /><h2 className="text-2xl font-headline">No Projects Yet</h2><p className="text-muted-foreground">Get started by creating your first project.</p>
+            </CardContent>
+          </Card>
+      )}
+
+      {!loading && projects.length > 0 && user && (
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {projects.map((project) => (
+              <Card key={project.id} id={project.id} className="flex flex-col scroll-mt-24">
+                <CardHeader>
+                  <div className="flex justify-between items-start gap-4">
+                      <CardTitle className="font-headline text-2xl flex-1">{project.title}</CardTitle>
+                      <Badge className={`${statusColors[project.status]} text-primary-foreground`}>{project.status}</Badge>
                   </div>
+                  <CardDescription className="pt-2 line-clamp-2">{project.description}</CardDescription>
+                </CardHeader>
+                <CardContent className="flex-grow">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-sm font-medium text-muted-foreground">Progress</span>
+                      <span className="text-sm font-medium">{project.progress}%</span>
+                    </div>
+                    <Progress value={project.progress} className="h-2" />
+                </CardContent>
+                <CardFooter className="flex-col items-start gap-4">
+                    <div className="flex items-center justify-between w-full">
+                        <span className="text-sm font-medium text-muted-foreground">Team</span>
+                        <div className="flex -space-x-2">
+                        {project.team.slice(0, 5).map((uid) => (
+                            <Avatar key={uid} className="h-8 w-8 border-2 border-card"><AvatarFallback>{getInitials(users[uid]?.displayName)}</AvatarFallback></Avatar>
+                        ))}
+                        {project.team.length > 5 && <Avatar className="h-8 w-8 border-2 border-card"><AvatarFallback>+{project.team.length - 5}</AvatarFallback></Avatar>}
+                        </div>
+                    </div>
+                    <ProjectDetailsDialog project={project} users={users} currentUser={user} onActionComplete={fetchData} />
                 </CardFooter>
               </Card>
             )
-          })}
+          )}
         </div>
       )}
     </div>
