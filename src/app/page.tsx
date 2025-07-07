@@ -67,8 +67,9 @@ interface Project {
 interface ResourceData {
   name: string;
   category: string;
-  quantity: number | string;
+  quantity: number;
   status: string;
+  minStock?: number;
 }
 
 interface UpcomingTask {
@@ -180,11 +181,10 @@ export default function Dashboard() {
     // Resources listener (for stats)
     const allResourcesQuery = query(resourcesRef, where('companyId', '==', companyId));
     unsubscribes.push(onSnapshot(allResourcesQuery, (snap) => {
-      const LOW_STOCK_THRESHOLD = 10;
       const allResources = snap.docs.map(doc => doc.data()) as ResourceData[];
 
       const lowStockResources = allResources.filter(
-        r => r.category === 'Inputs' && typeof r.quantity === 'number' && r.quantity < LOW_STOCK_THRESHOLD
+        r => r.category === 'Inputs' && typeof r.quantity === 'number' && typeof r.minStock === 'number' && r.quantity < r.minStock
       );
       const needsMaintenanceResources = allResources.filter(
         r => r.status === 'Needs Maintenance'

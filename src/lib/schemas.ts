@@ -171,11 +171,16 @@ export type DeleteProjectOutputInput = z.infer<typeof DeleteProjectOutputInputSc
 
 
 // --- Resource Schemas ---
+const resourceCategoryEnum = z.enum(["Inputs", "Equipment", "Vehicles", "Infrastructure", "Finance", "Other"]);
+const resourceStatusEnum = z.enum(["In Stock", "Good", "In Use", "On Track", "Low Stock", "Needs Maintenance"]);
+
 export const CreateResourceInputSchema = z.object({
   name: z.string().min(1, "Resource name is required."),
-  category: z.enum(["Inputs", "Equipment", "Infrastructure", "Finance"]),
-  quantity: z.coerce.number({ invalid_type_error: "Quantity must be a number."}).min(0, "Quantity cannot be negative."),
-  status: z.enum(["In Stock", "Good", "In Use", "On Track", "Low Stock", "Needs Maintenance"]),
+  category: resourceCategoryEnum,
+  quantity: z.coerce.number({ invalid_type_error: "Quantity must be a number."}),
+  unit: z.string().min(1, "Unit is required."),
+  minStock: z.coerce.number().min(0, "Min stock cannot be negative.").optional(),
+  status: resourceStatusEnum,
   companyId: z.string(),
 });
 export type CreateResourceInput = z.infer<typeof CreateResourceInputSchema>;
@@ -183,9 +188,11 @@ export type CreateResourceInput = z.infer<typeof CreateResourceInputSchema>;
 export const UpdateResourceInputSchema = z.object({
   id: z.string(),
   name: z.string().min(1, "Resource name is required."),
-  category: z.enum(["Inputs", "Equipment", "Infrastructure", "Finance"]),
-  quantity: z.coerce.number({ invalid_type_error: "Quantity must be a number."}).min(0, "Quantity cannot be negative."),
-  status: z.enum(["In Stock", "Good", "In Use", "On Track", "Low Stock", "Needs Maintenance"]),
+  category: resourceCategoryEnum,
+  quantity: z.coerce.number({ invalid_type_error: "Quantity must be a number."}),
+  unit: z.string().min(1, "Unit is required."),
+  minStock: z.coerce.number().min(0, "Min stock cannot be negative.").optional(),
+  status: resourceStatusEnum,
 });
 export type UpdateResourceInput = z.infer<typeof UpdateResourceInputSchema>;
 
