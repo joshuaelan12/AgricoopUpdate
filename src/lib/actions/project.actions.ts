@@ -1,3 +1,4 @@
+
 'use server';
 
 import { z } from 'zod';
@@ -48,6 +49,27 @@ const getProjectAndValidate = async (projectId: string) => {
     if (!projectDoc.exists) throw new Error("Project not found.");
     return { ref: projectRef, data: projectDoc.data()! };
 }
+
+// Helper to normalize the tasks array, converting all Timestamps to JS Dates
+const normalizeTasksArray = (tasks: any[]): Task[] => {
+    if (!tasks) return [];
+    return tasks.map(task => {
+        const deadline = task.deadline;
+        // Check if it's a Firestore Timestamp and convert, otherwise leave as is (Date or null)
+        const normalizedDeadline = deadline && typeof deadline.toDate === 'function' ? deadline.toDate() : deadline;
+        
+        const files = task.files || [];
+        const normalizedFiles = files.map((file: any) => {
+             const uploadedAt = file.uploadedAt;
+             const normalizedUploadedAt = uploadedAt && typeof uploadedAt.toDate === 'function' ? uploadedAt.toDate() : uploadedAt;
+             return {...file, uploadedAt: normalizedUploadedAt };
+        });
+
+        // The Task type from schemas expects JS dates, so we return a compliant object
+        return { ...task, deadline: normalizedDeadline, files: normalizedFiles };
+    });
+};
+
 
 const recalculateProgressAndTeam = (tasks: Task[]) => {
     const totalTasks = tasks.length;
@@ -143,12 +165,15 @@ export async function addTaskToProject(input: AddTaskInput, actor: { uid: string
             status: 'To Do',
             files: [],
         };
+        
+        const existingTasks = data.tasks || [];
+        const mixedTasks = [...existingTasks, newTask];
+        const normalizedTasks = normalizeTasksArray(mixedTasks);
 
-        const updatedTasks = [...(data.tasks || []), newTask];
-        const { progress, team } = recalculateProgressAndTeam(updatedTasks);
+        const { progress, team } = recalculateProgressAndTeam(normalizedTasks);
 
         await ref.update({
-            tasks: updatedTasks,
+            tasks: normalizedTasks,
             team: team,
             progress: progress,
             updatedAt: FieldValue.serverTimestamp(),
@@ -176,11 +201,12 @@ export async function updateTask(input: UpdateTaskInput, actor: { uid: string, d
         const { projectId, taskId, ...updateData } = UpdateTaskInputSchema.parse(input);
         const { ref, data } = await getProjectAndValidate(projectId);
 
-        const originalTask = (data.tasks || []).find((task: Task) => task.id === taskId);
+        const tasksFromDb: any[] = data.tasks || [];
+        const originalTask = tasksFromDb.find((task) => task.id === taskId);
         if (!originalTask) throw new Error("Task not found in project.");
 
         let taskUpdated = false;
-        const updatedTasks = (data.tasks || []).map((task: Task) => {
+        const mixedTasks = tasksFromDb.map((task) => {
             if (task.id === taskId) {
                 taskUpdated = true;
                 return { ...task, ...updateData };
@@ -190,19 +216,20 @@ export async function updateTask(input: UpdateTaskInput, actor: { uid: string, d
 
         if (!taskUpdated) throw new Error("Task not found in project.");
         
-        const { progress, team } = recalculateProgressAndTeam(updatedTasks);
+        const normalizedTasks = normalizeTasksArray(mixedTasks);
+        
+        const { progress, team } = recalculateProgressAndTeam(normalizedTasks);
 
         await ref.update({
-            tasks: updatedTasks,
+            tasks: normalizedTasks,
             team: team,
             progress: progress,
             updatedAt: FieldValue.serverTimestamp(),
         });
 
-        const updatedTask = updatedTasks.find(t => t.id === taskId)!;
+        const updatedTask = normalizedTasks.find(t => t.id === taskId)!;
         await logActivity(data.companyId, `${actor.displayName} updated task "${updatedTask.title}" in project "${data.title}".`);
         
-        // Handle notifications for newly assigned users
         if (updateData.assignedTo) {
             const originalAssignees = new Set(originalTask.assignedTo);
             const newAssignees = updateData.assignedTo.filter(userId => !originalAssignees.has(userId));
@@ -216,10 +243,9 @@ export async function updateTask(input: UpdateTaskInput, actor: { uid: string, d
             }
         }
         
-        // Handle notifications for status change
         if (updateData.status && updateData.status !== originalTask.status) {
              await createNotificationsForTeam(
-                 updatedTask.assignedTo, // Notify current assignees of the task
+                 updatedTask.assignedTo,
                  `The status of task "${updatedTask.title}" in project "${data.title}" was updated to "${updateData.status}".`, 
                  `/projects#${projectId}`, 
                  actor.uid
@@ -241,14 +267,17 @@ export async function deleteTask(input: DeleteTaskInput, actorName: string) {
         const { projectId, taskId } = DeleteTaskInputSchema.parse(input);
         const { ref, data } = await getProjectAndValidate(projectId);
 
-        const taskToDelete = data.tasks.find((t: Task) => t.id === taskId);
+        const tasksFromDb: any[] = data.tasks || [];
+        const taskToDelete = tasksFromDb.find((t) => t.id === taskId);
         if (!taskToDelete) throw new Error("Task not found.");
 
-        const updatedTasks = data.tasks.filter((t: Task) => t.id !== taskId);
-        const { progress, team } = recalculateProgressAndTeam(updatedTasks);
+        const remainingTasks = tasksFromDb.filter((t) => t.id !== taskId);
+        const normalizedTasks = normalizeTasksArray(remainingTasks);
+        
+        const { progress, team } = recalculateProgressAndTeam(normalizedTasks);
 
         await ref.update({
-            tasks: updatedTasks,
+            tasks: normalizedTasks,
             team: team,
             progress: progress,
             updatedAt: FieldValue.serverTimestamp(),
@@ -369,11 +398,13 @@ export async function addFileToTask(input: AddFileToTaskInput, actorName: string
         });
 
         if (!taskUpdated) throw new Error("Task not found in project.");
+        
+        const normalizedTasks = normalizeTasksArray(updatedTasks);
 
-        await ref.update({ tasks: updatedTasks, updatedAt: FieldValue.serverTimestamp() });
+        await ref.update({ tasks: normalizedTasks, updatedAt: FieldValue.serverTimestamp() });
 
-        const task = updatedTasks.find(t => t.id === taskId);
-        await logActivity(data.companyId, `${actorName} uploaded file "${file.name}" to task "${task.title}" in project "${data.title}".`);
+        const task = normalizedTasks.find(t => t.id === taskId);
+        await logActivity(data.companyId, `${actorName} uploaded file "${file.name}" to task "${task!.title}" in project "${data.title}".`);
         revalidatePath('/projects');
         return { success: true };
     } catch (error: any) {
@@ -409,7 +440,8 @@ export async function deleteFileFromTask(input: DeleteFileFromTaskInput, actorNa
         const fileRef = adminStorage.bucket().file(`projects/${projectId}/tasks/${taskId}/${fileId}-${fileToDelete.name}`);
         await fileRef.delete({ ignoreNotFound: true });
         
-        await ref.update({ tasks: updatedTasks, updatedAt: FieldValue.serverTimestamp() });
+        const normalizedTasks = normalizeTasksArray(updatedTasks);
+        await ref.update({ tasks: normalizedTasks, updatedAt: FieldValue.serverTimestamp() });
         
         await logActivity(data.companyId, `${actorName} deleted file "${fileToDelete.name}" from task "${taskTitle}" in project "${data.title}".`);
         revalidatePath('/projects');
