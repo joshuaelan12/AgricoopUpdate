@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import { getApps, initializeApp, App } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getStorage } from 'firebase-admin/storage';
 
 let app: App;
 
@@ -18,7 +19,8 @@ if (getApps().length === 0) {
         try {
             const serviceAccount = JSON.parse(process.env.FIREBASE_ADMIN_SDK_CONFIG);
             app = initializeApp({
-                credential: admin.credential.cert(serviceAccount)
+                credential: admin.credential.cert(serviceAccount),
+                storageBucket: `${serviceAccount.project_id}.appspot.com`,
             });
         } catch (e: any) {
              console.error("Failed to parse FIREBASE_ADMIN_SDK_CONFIG:", e.message);
@@ -52,5 +54,7 @@ if (getApps().length === 0) {
 
 const adminAuth = getAuth(app);
 const adminDb = getFirestore(app);
+const adminStorage = getStorage(app);
 
-export { adminAuth, adminDb, FieldValue };
+
+export { adminAuth, adminDb, adminStorage, FieldValue };

@@ -2,6 +2,15 @@ import { z } from 'zod';
 
 // --- Base Data Interfaces (for use in components) ---
 
+export const FileSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  url: z.string().url(),
+  uploaderName: z.string(),
+  uploadedAt: z.date(),
+});
+export type ProjectFile = z.infer<typeof FileSchema>;
+
 export interface Comment {
   id: string;
   text: string;
@@ -17,6 +26,7 @@ export const TaskSchema = z.object({
   assignedTo: z.array(z.string()),
   deadline: z.date().nullable(),
   status: TaskStatusSchema,
+  files: z.array(FileSchema).optional(),
 });
 export type Task = z.infer<typeof TaskSchema>;
 
@@ -31,6 +41,7 @@ export interface Project {
   companyId: string;
   comments: Comment[];
   tasks: Task[];
+  files: ProjectFile[];
   priority?: 'Low' | 'Medium' | 'High';
   deadline?: Date | null;
   estimatedBudget?: number;
@@ -231,3 +242,40 @@ export const DeallocateResourceInputSchema = z.object({
   resourceId: z.string(),
 });
 export type DeallocateResourceInput = z.infer<typeof DeallocateResourceInputSchema>;
+
+
+// --- File Schemas ---
+const FileInputSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  url: z.string().url(),
+});
+
+export const AddFileToProjectInputSchema = z.object({
+  projectId: z.string(),
+  file: FileInputSchema,
+  uploaderName: z.string(),
+});
+export type AddFileToProjectInput = z.infer<typeof AddFileToProjectInputSchema>;
+
+export const DeleteFileFromProjectInputSchema = z.object({
+  projectId: z.string(),
+  fileId: z.string(),
+});
+export type DeleteFileFromProjectInput = z.infer<typeof DeleteFileFromProjectInputSchema>;
+
+
+export const AddFileToTaskInputSchema = z.object({
+  projectId: z.string(),
+  taskId: z.string(),
+  file: FileInputSchema,
+  uploaderName: z.string(),
+});
+export type AddFileToTaskInput = z.infer<typeof AddFileToTaskInputSchema>;
+
+export const DeleteFileFromTaskInputSchema = z.object({
+  projectId: z.string(),
+  taskId: z.string(),
+  fileId: z.string(),
+});
+export type DeleteFileFromTaskInput = z.infer<typeof DeleteFileFromTaskInputSchema>;

@@ -2,17 +2,19 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { db } from "@/lib/firebase";
+import { db, storage } from "@/lib/firebase";
 import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
 
-import { createProject, addProjectComment, deleteProjectComment, updateProject, deleteProject, addTaskToProject, updateTask, deleteTask } from "@/lib/actions/project.actions";
-import { CreateProjectInputSchema, UpdateProjectInputSchema, AddProjectCommentInputSchema, AddTaskInputSchema, UpdateTaskInputSchema } from "@/lib/schemas";
-import type { Project, Task, UserData, Comment, AddProjectCommentInput, UpdateProjectInput, AddTaskInput, UpdateTaskInput } from "@/lib/schemas";
+
+import { createProject, addProjectComment, deleteProjectComment, updateProject, deleteProject, addTaskToProject, updateTask, deleteTask, addFileToProject, deleteFileFromProject, addFileToTask, deleteFileFromTask } from "@/lib/actions/project.actions";
+import { CreateProjectInputSchema, UpdateProjectInputSchema, AddProjectCommentInputSchema, AddTaskInputSchema, UpdateTaskInputSchema, AddFileToProjectInputSchema, AddFileToTaskInputSchema } from "@/lib/schemas";
+import type { Project, Task, UserData, Comment, AddProjectCommentInput, UpdateProjectInput, AddTaskInput, UpdateTaskInput, ProjectFile } from "@/lib/schemas";
 import { useToast } from "@/hooks/use-toast";
 
 import {
@@ -67,7 +69,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
-import { FolderKanban, PlusCircle, Users as UsersIcon, Loader2, MessageSquare, Trash2, MoreVertical, Edit, CalendarIcon, Check, GripVertical, Grip, ChevronDown, ListTodo } from "lucide-react";
+import { FolderKanban, PlusCircle, Users as UsersIcon, Loader2, MessageSquare, Trash2, MoreVertical, Edit, CalendarIcon, Check, GripVertical, Grip, ChevronDown, ListTodo, Paperclip, UploadCloud, File as FileIcon, Download } from "lucide-react";
 
 // --- HELPER FUNCTIONS & CONSTANTS ---
 const getInitials = (name: string | undefined) => {
@@ -91,9 +93,9 @@ const projectStatuses: Project['status'][] = ["Planning", "In Progress", "On Hol
 const priorities: Project['priority'][] = ['Low', 'Medium', 'High'];
 const taskStatuses: Task['status'][] = ['To Do', 'In Progress', 'Completed'];
 
-const currencyFormatter = new Intl.NumberFormat('en-US', {
+const currencyFormatter = new Intl.NumberFormat('fr-CM', {
   style: 'currency',
-  currency: 'USD',
+  currency: 'XAF',
   minimumFractionDigits: 0,
 });
 
@@ -200,7 +202,7 @@ function CreateProjectDialog({ actor, onActionComplete }: { actor: { uid: string
                 <FormItem className="flex flex-col"><FormLabel>Deadline</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("pl-3 text-left font-normal",!field.value && "text-muted-foreground")}>{field.value ? format(field.value, "PPP") : (<span>Pick a date</span>)}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(date) => date < new Date("1900-01-01")} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>
               )}/>
               <FormField control={form.control} name="estimatedBudget" render={({ field }) => (
-                <FormItem><FormLabel>Est. Budget ($)</FormLabel><FormControl><Input type="number" placeholder="5000" {...field} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Est. Budget (XAF)</FormLabel><FormControl><Input type="number" placeholder="500000" {...field} /></FormControl><FormMessage /></FormItem>
               )}/>
              </div>
             <DialogFooter>
@@ -303,6 +305,155 @@ function AddOrEditTaskDialog({ mode, project, task, users, actor, onActionComple
   );
 }
 
+// --- FILE MANAGER COMPONENT ---
+function FileManager({
+  projectId,
+  taskId,
+  files,
+  canUpload,
+  canDelete,
+  actor,
+  onActionComplete,
+}: {
+  projectId: string;
+  taskId?: string;
+  files: ProjectFile[];
+  canUpload: boolean;
+  canDelete: boolean;
+  actor: { uid: string, displayName: string };
+  onActionComplete: () => void;
+}) {
+  const { toast } = useToast();
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [deletingFileId, setDeletingFileId] = useState<string | null>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setSelectedFile(e.target.files[0]);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!selectedFile || !storage) return;
+
+    setIsUploading(true);
+    setUploadProgress(0);
+
+    const fileId = adminDb.collection("projects").doc().id; // Generate a unique ID
+    const filePath = taskId
+      ? `projects/${projectId}/tasks/${taskId}/${fileId}-${selectedFile.name}`
+      : `projects/${projectId}/${fileId}-${selectedFile.name}`;
+    const storageRef = ref(storage, filePath);
+
+    const uploadTask = uploadBytesResumable(storageRef, selectedFile);
+
+    uploadTask.on(
+      "state_changed",
+      (snapshot) => {
+        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        setUploadProgress(progress);
+      },
+      (error) => {
+        console.error("Upload failed:", error);
+        toast({ variant: "destructive", title: "Upload Failed", description: error.message });
+        setIsUploading(false);
+      },
+      async () => {
+        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+        const fileData = { id: fileId, name: selectedFile.name, url: downloadURL };
+        
+        const result = taskId
+          ? await addFileToTask({ projectId, taskId, file: fileData, uploaderName: actor.displayName }, actor.displayName)
+          : await addFileToProject({ projectId, file: fileData, uploaderName: actor.displayName }, actor.displayName);
+        
+        if (result.success) {
+          toast({ title: "File Uploaded" });
+          onActionComplete();
+        } else {
+          toast({ variant: "destructive", title: "Failed to save file reference", description: result.error });
+        }
+
+        setSelectedFile(null);
+        setIsUploading(false);
+      }
+    );
+  };
+  
+  const handleDelete = async (file: ProjectFile) => {
+      setDeletingFileId(file.id);
+      const result = taskId
+        ? await deleteFileFromTask({ projectId, taskId, fileId: file.id }, actor.displayName)
+        : await deleteFileFromProject({ projectId, fileId: file.id }, actor.displayName);
+
+      if (result.success) {
+          toast({ title: "File Deleted" });
+          onActionComplete();
+      } else {
+          toast({ variant: "destructive", title: "Deletion Failed", description: result.error });
+      }
+      setDeletingFileId(null);
+  }
+
+  return (
+    <div className="space-y-4">
+      {canUpload && (
+        <div className="p-4 border rounded-lg space-y-4 bg-muted/50">
+          <h4 className="font-medium">Upload a new file</h4>
+          <Input type="file" onChange={handleFileChange} disabled={isUploading} />
+          {isUploading && <Progress value={uploadProgress} className="h-2" />}
+          {selectedFile && !isUploading && (
+            <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">{selectedFile.name}</span>
+                <Button onClick={handleUpload} size="sm"><UploadCloud className="mr-2 h-4 w-4" />Upload</Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div>
+        <h4 className="font-medium mb-2">Attached Files</h4>
+        {files.length > 0 ? (
+          <div className="space-y-2">
+            {files.map(file => (
+              <div key={file.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50">
+                <div className="flex items-center gap-3">
+                    <FileIcon className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                        <a href={file.url} target="_blank" rel="noopener noreferrer" className="font-medium hover:underline">{file.name}</a>
+                        <p className="text-xs text-muted-foreground">Uploaded by {file.uploaderName} on {format(file.uploadedAt, 'PP')}</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Button asChild variant="outline" size="icon" className="h-8 w-8">
+                        <a href={file.url} target="_blank" download><Download className="h-4 w-4" /></a>
+                    </Button>
+                    {canDelete && (
+                         <AlertDialog>
+                            <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" disabled={deletingFileId === file.id}><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete the file.</AlertDialogDescription></AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleDelete(file)}>{deletingFileId === file.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Delete</AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground text-center py-4">No files have been attached yet.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 // --- PROJECT DETAILS DIALOG ---
 function ProjectDetailsDialog({ project, users, currentUser, onActionComplete }: { project: Project, users: { [uid: string]: UserData }, currentUser: {uid: string, displayName: string, role: string}, onActionComplete: () => void }) {
   const { toast } = useToast();
@@ -366,6 +517,10 @@ function ProjectDetailsDialog({ project, users, currentUser, onActionComplete }:
     return (project.comments || []).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [project.comments]);
 
+  const sortedProjectFiles = useMemo(() => {
+    return (project.files || []).sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+  }, [project.files]);
+
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -390,10 +545,11 @@ function ProjectDetailsDialog({ project, users, currentUser, onActionComplete }:
         <Tabs defaultValue="tasks" className="flex-grow flex flex-col min-h-0">
           <TabsList className="mt-4">
             <TabsTrigger value="tasks">Tasks</TabsTrigger>
+            <TabsTrigger value="files">Files</TabsTrigger>
             <TabsTrigger value="comments">Comments</TabsTrigger>
           </TabsList>
           
-          <TabsContent value="tasks" className="flex-grow overflow-y-auto mt-0">
+          <TabsContent value="tasks" className="flex-grow overflow-y-auto mt-0 -mr-6 pr-6">
               <Card className="mt-2 border-0 shadow-none">
                 <CardHeader className="flex flex-row items-center justify-between p-4">
                     <div>
@@ -402,15 +558,16 @@ function ProjectDetailsDialog({ project, users, currentUser, onActionComplete }:
                     </div>
                     {isManager && <AddOrEditTaskDialog mode="add" project={project} users={Object.values(users)} actor={currentUser} onActionComplete={onActionComplete} />}
                 </CardHeader>
-                <CardContent className="p-4 space-y-2">
+                <CardContent className="p-4 space-y-4">
                     {project.tasks?.length > 0 ? (
                         project.tasks.map(task => {
                             const canUpdateTask = isManager || task.assignedTo.includes(currentUser.uid);
                             return (
-                                <div key={task.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50">
+                                <Card key={task.id} className="p-4">
+                                <div className="flex items-start gap-4">
                                     <div className="flex-grow">
                                         <p className="font-medium">{task.title}</p>
-                                        <div className="flex items-center gap-x-3 text-xs text-muted-foreground">
+                                        <div className="flex items-center gap-x-3 text-xs text-muted-foreground mt-1">
                                             {task.deadline && <span>Due: {format(task.deadline, 'PP')}</span>}
                                             {task.assignedTo.length > 0 && (
                                                 <div className="flex items-center gap-1">
@@ -420,7 +577,7 @@ function ProjectDetailsDialog({ project, users, currentUser, onActionComplete }:
                                             )}
                                         </div>
                                     </div>
-                                     <div className="flex items-center gap-2">
+                                     <div className="flex items-center gap-2 flex-shrink-0">
                                         <Select value={task.status} onValueChange={(newStatus: Task['status']) => handleTaskStatusChange(task.id, newStatus)} disabled={!canUpdateTask}>
                                             <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
                                             <SelectContent><>{taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</>
@@ -444,6 +601,17 @@ function ProjectDetailsDialog({ project, users, currentUser, onActionComplete }:
                                         )}
                                      </div>
                                 </div>
+                                <Separator className="my-4" />
+                                <FileManager
+                                    projectId={project.id}
+                                    taskId={task.id}
+                                    files={task.files || []}
+                                    canUpload={canUpdateTask}
+                                    canDelete={isManager}
+                                    actor={currentUser}
+                                    onActionComplete={onActionComplete}
+                                />
+                                </Card>
                             )
                         })
                     ) : (
@@ -452,8 +620,27 @@ function ProjectDetailsDialog({ project, users, currentUser, onActionComplete }:
                 </CardContent>
               </Card>
           </TabsContent>
+
+          <TabsContent value="files" className="flex-grow overflow-y-auto mt-0 -mr-6 pr-6">
+            <Card className="mt-2 border-0 shadow-none">
+                <CardHeader className="p-4">
+                    <CardTitle className="text-xl font-headline">Project Documents</CardTitle>
+                    <CardDescription>Manage files and documents related to the entire project.</CardDescription>
+                </CardHeader>
+                <CardContent className="p-4">
+                    <FileManager 
+                        projectId={project.id}
+                        files={sortedProjectFiles}
+                        canUpload={isManager}
+                        canDelete={isManager}
+                        actor={currentUser}
+                        onActionComplete={onActionComplete}
+                    />
+                </CardContent>
+            </Card>
+          </TabsContent>
           
-          <TabsContent value="comments" className="flex-grow overflow-y-auto mt-0">
+          <TabsContent value="comments" className="flex-grow overflow-y-auto mt-0 -mr-6 pr-6">
              <Card className="mt-2 border-0 shadow-none">
                 <CardHeader className="p-4">
                     <CardTitle className="text-xl font-headline">Comments</CardTitle>
@@ -591,7 +778,7 @@ function ProjectActions({ project, actorName, onActionComplete }: { project: Pro
                 <FormItem className="flex flex-col"><FormLabel>Deadline</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("pl-3 text-left font-normal",!field.value && "text-muted-foreground")}>{field.value ? format(field.value, "PPP") : (<span>Pick a date</span>)}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>
               )}/>
               <FormField control={form.control} name="estimatedBudget" render={({ field }) => (
-                <FormItem><FormLabel>Est. Budget ($)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Est. Budget (XAF)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
               )}/>
              </div>
             <DialogFooter>
@@ -633,8 +820,9 @@ export default function ProjectsPage() {
             const data = doc.data();
             const deadline = data.deadline?.toDate() ?? null;
             const comments = (data.comments || []).map((comment: any) => ({ ...comment, createdAt: comment.createdAt?.toDate() })).filter((c: Comment) => c.createdAt);
-            const tasks = (data.tasks || []).map((task: any) => ({ ...task, deadline: task.deadline?.toDate() })).filter((t: Task) => t.id);
-            return { id: doc.id, ...data, deadline, comments, tasks } as Project;
+            const files = (data.files || []).map((file: any) => ({ ...file, uploadedAt: file.uploadedAt?.toDate() })).filter((f: ProjectFile) => f.uploadedAt);
+            const tasks = (data.tasks || []).map((task: any) => ({ ...task, deadline: task.deadline?.toDate(), files: (task.files || []).map((f:any) => ({...f, uploadedAt: f.uploadedAt?.toDate()})).filter(Boolean) })).filter((t: Task) => t.id);
+            return { id: doc.id, ...data, deadline, comments, tasks, files } as Project;
         });
         
         const usersData = usersSnap.docs.reduce((acc, doc) => {
