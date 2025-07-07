@@ -586,9 +586,11 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [isDeletingComment, setIsDeletingComment] = useState<string | null>(null);
   const isManager = currentUser.role === 'Admin' || currentUser.role === 'Project Manager';
+  const cleanActor = { uid: currentUser.uid, displayName: currentUser.displayName };
+
 
   const handleTaskStatusChange = async (taskId: string, newStatus: Task['status']) => {
-    const result = await updateTask({ projectId: project.id, taskId, status: newStatus }, currentUser);
+    const result = await updateTask({ projectId: project.id, taskId, status: newStatus }, cleanActor);
     if (result.success) {
       toast({ title: "Task Status Updated" });
       onActionComplete();
@@ -681,7 +683,7 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
                         <CardTitle className="text-xl font-headline">Task List</CardTitle>
                         <CardDescription>Track and manage all tasks for this project.</CardDescription>
                     </div>
-                    {isManager && <AddOrEditTaskDialog mode="add" project={project} users={Object.values(users)} actor={currentUser} onActionComplete={onActionComplete} />}
+                    {isManager && <AddOrEditTaskDialog mode="add" project={project} users={Object.values(users)} actor={cleanActor} onActionComplete={onActionComplete} />}
                 </CardHeader>
                 <CardContent className="p-4 space-y-4">
                     {project.tasks?.length > 0 ? (
@@ -712,7 +714,7 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
-                                                    <AddOrEditTaskDialog mode="edit" project={project} task={task} users={Object.values(users)} actor={currentUser} onActionComplete={onActionComplete} />
+                                                    <AddOrEditTaskDialog mode="edit" project={project} task={task} users={Object.values(users)} actor={cleanActor} onActionComplete={onActionComplete} />
                                                     <DropdownMenuSeparator />
                                                      <AlertDialog>
                                                         <AlertDialogTrigger asChild><DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive"><Trash2 className="mr-2 h-4 w-4" /> Delete Task</DropdownMenuItem></AlertDialogTrigger>
@@ -733,7 +735,7 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
                                     files={task.files || []}
                                     canUpload={canUpdateTask}
                                     canDelete={isManager}
-                                    actor={currentUser}
+                                    actor={cleanActor}
                                     onActionComplete={onActionComplete}
                                 />
                                 </Card>
@@ -751,7 +753,7 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
               <ResourceManagementTab 
                 project={project}
                 allResources={resources}
-                actor={currentUser}
+                actor={cleanActor}
                 onActionComplete={onActionComplete}
               />
             ) : (
@@ -775,7 +777,7 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
                         files={sortedProjectFiles}
                         canUpload={isManager}
                         canDelete={isManager}
-                        actor={currentUser}
+                        actor={cleanActor}
                         onActionComplete={onActionComplete}
                     />
                 </CardContent>
