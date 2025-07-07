@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Package, Tractor, Droplets, DollarSign, Warehouse, PlusCircle, Loader2, Pencil } from "lucide-react";
+import { Package, Tractor, Droplets, DollarSign, Warehouse, PlusCircle, Loader2, Pencil, Car } from "lucide-react";
 import { useAuth } from '@/hooks/use-auth';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -52,16 +52,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { createResource, updateResource } from '@/lib/actions/resource.actions';
 import { CreateResourceInputSchema, UpdateResourceInputSchema } from '@/lib/schemas';
-import type { UpdateResourceInput } from '@/lib/schemas';
+import type { CreateResourceInput, UpdateResourceInput } from '@/lib/schemas';
 
 
 // --- DATA INTERFACE ---
 interface Resource {
     id: string;
     name: string;
-    category: "Inputs" | "Equipment" | "Infrastructure" | "Finance" | string;
+    category: "Inputs" | "Equipment" | "Infrastructure" | "Finance" | "Vehicles" | "Other" | string;
     quantity: number;
     status: string;
+    unit: string;
+    minStock?: number;
 }
 
 // --- CONSTANTS & HELPERS ---
@@ -73,31 +75,52 @@ const statusBadgeVariant: { [key: string]: "default" | "secondary" | "destructiv
 const categoryIcons: { [key: string]: React.ReactNode } = {
   "Inputs": <Package className="h-4 w-4 text-muted-foreground" />,
   "Equipment": <Tractor className="h-4 w-4 text-muted-foreground" />,
+  "Vehicles": <Car className="h-4 w-4 text-muted-foreground" />,
   "Infrastructure": <Droplets className="h-4 w-4 text-muted-foreground" />,
   "Finance": <DollarSign className="h-4 w-4 text-muted-foreground" />,
+  "Other": <Warehouse className="h-4 w-4 text-muted-foreground" />,
 };
 
-const resourceCategories = ["Inputs", "Equipment", "Infrastructure", "Finance"];
+const resourceCategories: Resource['category'][] = ["Inputs", "Equipment", "Vehicles", "Infrastructure", "Finance", "Other"];
 const resourceStatuses = ["In Stock", "Good", "In Use", "On Track", "Low Stock", "Needs Maintenance"];
 
+
+// --- ADD/EDIT DIALOG HELPER ---
+function getDynamicLabels(category: string) {
+    switch (category) {
+        case 'Inputs': return { quantityLabel: 'Quantity', unit: 'kg' };
+        case 'Finance': return { quantityLabel: 'Amount', unit: 'XAF' };
+        default: return { quantityLabel: 'Quantity', unit: 'units' };
+    }
+}
 
 // --- ADD RESOURCE DIALOG ---
 function AddResourceDialog({ companyId, actorName, onResourceAdded }: { companyId: string, actorName: string, onResourceAdded: () => void }) {
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
-  const form = useForm<z.infer<typeof CreateResourceInputSchema>>({
+  const form = useForm<CreateResourceInput>({
     resolver: zodResolver(CreateResourceInputSchema),
     defaultValues: {
       name: "",
       category: "Inputs",
       quantity: 0,
+      unit: 'kg',
+      minStock: 0,
       status: "In Stock",
       companyId: companyId,
     },
   });
 
-  const onSubmit = async (values: z.infer<typeof CreateResourceInputSchema>) => {
+  const category = form.watch('category');
+  const { quantityLabel, unit: defaultUnit } = getDynamicLabels(category);
+
+  useEffect(() => {
+    form.setValue('unit', defaultUnit);
+  }, [category, defaultUnit, form.setValue]);
+
+
+  const onSubmit = async (values: CreateResourceInput) => {
     const result = await createResource(values, actorName);
     if (result.success) {
       toast({
@@ -140,39 +163,59 @@ function AddResourceDialog({ companyId, actorName, onResourceAdded }: { companyI
                 <FormMessage />
               </FormItem>
             )}/>
-            <FormField control={form.control} name="quantity" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Quantity (kg)</FormLabel>
-                <FormControl><Input type="number" placeholder="e.g., 50" {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )}/>
-            <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="category" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Category</FormLabel>
-                   <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      {resourceCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}/>
-              <FormField control={form.control} name="status" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Status</FormLabel>
-                   <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      {resourceStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}/>
+             <div className="grid grid-cols-2 gap-4">
+                <FormField control={form.control} name="category" render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Category</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                        <SelectContent>
+                        {resourceCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    <FormMessage />
+                    </FormItem>
+                )}/>
+                <FormField control={form.control} name="status" render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                        <SelectContent>
+                        {resourceStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    <FormMessage />
+                    </FormItem>
+                )}/>
             </div>
+             <div className="grid grid-cols-2 gap-4">
+                <FormField control={form.control} name="quantity" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{quantityLabel}</FormLabel>
+                    <FormControl><Input type="number" placeholder="e.g., 50" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}/>
+                 <FormField control={form.control} name="unit" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Unit</FormLabel>
+                    <FormControl><Input placeholder="e.g., kg, units, XAF" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}/>
+            </div>
+
+            {category === 'Inputs' && (
+                <FormField control={form.control} name="minStock" render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Minimum Stock for Alert</FormLabel>
+                    <FormControl><Input type="number" placeholder="e.g., 10" {...field} /></FormControl>
+                    <FormMessage />
+                </FormItem>
+                )}/>
+            )}
+
             <DialogFooter>
                <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
               <Button type="submit" disabled={form.formState.isSubmitting}>
@@ -199,9 +242,23 @@ function EditResourceDialog({ resource, actorName, onResourceUpdated }: { resour
       name: resource.name,
       category: resource.category,
       quantity: resource.quantity,
+      unit: resource.unit,
+      minStock: resource.minStock || 0,
       status: resource.status,
     },
   });
+
+  const category = form.watch('category');
+  const { quantityLabel, unit: defaultUnit } = getDynamicLabels(category);
+  
+  useEffect(() => {
+    // Only update the unit if the category changes to a different type (e.g. from Input to Finance)
+    // This avoids overwriting a custom unit if the user just re-selects the same category.
+    const currentUnit = form.getValues('unit');
+    if (currentUnit !== defaultUnit) {
+        form.setValue('unit', defaultUnit);
+    }
+  }, [category, defaultUnit, form]);
 
   const onSubmit = async (values: UpdateResourceInput) => {
     const result = await updateResource(values, actorName);
@@ -238,46 +295,65 @@ function EditResourceDialog({ resource, actorName, onResourceUpdated }: { resour
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField control={form.control} name="name" render={({ field }) => (
+             <FormField control={form.control} name="name" render={({ field }) => (
               <FormItem>
                 <FormLabel>Resource Name</FormLabel>
                 <FormControl><Input placeholder="e.g., Organic Fertilizer" {...field} /></FormControl>
                 <FormMessage />
               </FormItem>
             )}/>
-            <FormField control={form.control} name="quantity" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Quantity (kg)</FormLabel>
-                <FormControl><Input type="number" placeholder="e.g., 50" {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )}/>
-            <div className="grid grid-cols-2 gap-4">
-              <FormField control={form.control} name="category" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Category</FormLabel>
-                   <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      {resourceCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}/>
-              <FormField control={form.control} name="status" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Status</FormLabel>
-                   <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      {resourceStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}/>
+             <div className="grid grid-cols-2 gap-4">
+                <FormField control={form.control} name="category" render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Category</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                        <SelectContent>
+                        {resourceCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    <FormMessage />
+                    </FormItem>
+                )}/>
+                <FormField control={form.control} name="status" render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                        <SelectContent>
+                        {resourceStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    <FormMessage />
+                    </FormItem>
+                )}/>
             </div>
+             <div className="grid grid-cols-2 gap-4">
+                <FormField control={form.control} name="quantity" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{quantityLabel}</FormLabel>
+                    <FormControl><Input type="number" placeholder="e.g., 50" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}/>
+                 <FormField control={form.control} name="unit" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Unit</FormLabel>
+                    <FormControl><Input placeholder="e.g., kg, units, XAF" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}/>
+            </div>
+
+            {category === 'Inputs' && (
+                <FormField control={form.control} name="minStock" render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Minimum Stock for Alert</FormLabel>
+                    <FormControl><Input type="number" placeholder="e.g., 10" {...field} /></FormControl>
+                    <FormMessage />
+                </FormItem>
+                )}/>
+            )}
             <DialogFooter>
                <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
               <Button type="submit" disabled={form.formState.isSubmitting}>
@@ -358,7 +434,7 @@ export default function ResourcesPage() {
                 <TableRow>
                   <TableHead>Resource</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead>Quantity</TableHead>
+                  <TableHead>Amount / Quantity</TableHead>
                   <TableHead>Status</TableHead>
                   {user?.role === 'Admin' && <TableHead className="text-right">Actions</TableHead>}
                 </TableRow>
@@ -368,12 +444,12 @@ export default function ResourcesPage() {
                   <TableRow key={resource.id}>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        {categoryIcons[resource.category] || <Package className="h-4 w-4 text-muted-foreground" />}
+                        {categoryIcons[resource.category] || <Warehouse className="h-4 w-4 text-muted-foreground" />}
                         <span className="font-medium">{resource.name}</span>
                       </div>
                     </TableCell>
                     <TableCell>{resource.category}</TableCell>
-                    <TableCell>{resource.quantity} kg</TableCell>
+                    <TableCell>{resource.quantity} {resource.unit}</TableCell>
                     <TableCell>
                       <Badge variant={statusBadgeVariant[resource.status] || "outline"}>
                         {resource.status}
