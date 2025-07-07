@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { db, storage } from "@/lib/firebase";
-import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, Timestamp, doc } from 'firebase/firestore';
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -430,7 +430,7 @@ function FileManager({
     setIsUploading(true);
     setUploadProgress(0);
 
-    const fileId = collection(db, 'projects').doc().id; // Generate a unique ID
+    const fileId = doc(collection(db, 'projects')).id; // Generate a unique ID
     const filePath = taskId
       ? `projects/${projectId}/tasks/${taskId}/${fileId}-${selectedFile.name}`
       : `projects/${projectId}/${fileId}-${selectedFile.name}`;
