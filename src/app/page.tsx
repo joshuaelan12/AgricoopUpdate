@@ -10,6 +10,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
@@ -23,7 +24,10 @@ import {
   Bar,
 } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Progress } from '@/components/ui/progress';
+import { Button } from '@/components/ui/button';
+import { format } from 'date-fns';
+import { CheckCircle2 } from 'lucide-react';
+
 
 // --- DATA INTERFACES ---
 interface DashboardStats {
@@ -35,20 +39,20 @@ interface DashboardStats {
 
 type ProjectStatus = "Planning" | "In Progress" | "On Hold" | "Delayed" | "Completed";
 
-const projectStatuses: ProjectStatus[] = ["Planning", "In Progress", "On Hold", "Delayed", "Completed"];
-
-const statusColors: { [key in ProjectStatus]: string } = {
-  "Planning": "bg-gray-500",
-  "In Progress": "bg-blue-500",
-  "On Hold": "bg-yellow-500",
-  "Delayed": "bg-red-500",
-  "Completed": "bg-green-600",
-};
-
 interface AllocatedResource {
   resourceId: string;
   name: string;
   quantity: number;
+}
+
+type TaskStatus = 'To Do' | 'In Progress' | 'Completed';
+
+interface Task {
+  id: string;
+  title: string;
+  assignedTo: string[];
+  deadline: Date | null;
+  status: TaskStatus;
 }
 
 interface Project {
@@ -57,6 +61,7 @@ interface Project {
   status: ProjectStatus;
   progress: number;
   allocatedResources: AllocatedResource[];
+  tasks: Task[];
 }
 
 interface ResourceData {
@@ -64,6 +69,12 @@ interface ResourceData {
   category: string;
   quantity: number | string;
   status: string;
+}
+
+interface UpcomingTask {
+    task: Task;
+    projectId: string;
+    projectTitle: string;
 }
 
 // --- MAIN COMPONENT ---
@@ -75,16 +86,16 @@ export default function Dashboard() {
     resourceAlerts: 0,
     lowStockItems: [],
   });
-  const [projectsByStatus, setProjectsByStatus] = useState<{ [key: string]: Project[] }>({});
   const [allocationSummary, setAllocationSummary] = useState<{ name: string, allocated: number }[]>([]);
+  const [upcomingTasks, setUpcomingTasks] = useState<UpcomingTask[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user?.companyId) {
       setLoading(false);
       setStats({ totalProjects: 0, activeMembers: 0, resourceAlerts: 0, lowStockItems: [] });
-      setProjectsByStatus({});
       setAllocationSummary([]);
+      setUpcomingTasks([]);
       return;
     }
 
@@ -100,24 +111,46 @@ export default function Dashboard() {
     
     // --- REAL-TIME LISTENERS ---
     
-    // Projects listener (for stats, project board, and allocation summary)
+    // Projects listener (for stats, upcoming tasks, and allocation summary)
     const projectsQuery = query(projectsRef, where('companyId', '==', companyId));
     unsubscribes.push(onSnapshot(projectsQuery, (snap) => {
         setStats(prev => ({ ...prev, totalProjects: snap.size }));
-        const allProjects = snap.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        })) as Project[];
-
-        const groupedByStatus = allProjects.reduce((acc, project) => {
-            const status = project.status;
-            if (!acc[status]) {
-                acc[status] = [];
+        
+        const allProjects = snap.docs.map(doc => {
+            const data = doc.data();
+            const tasks = (data.tasks || []).map((task: any) => ({
+                ...task,
+                deadline: task.deadline?.toDate() ?? null,
+            }));
+            return {
+                id: doc.id,
+                ...data,
+                tasks,
             }
-            acc[status].push(project);
-            return acc;
-        }, {} as { [key: string]: Project[] });
-        setProjectsByStatus(groupedByStatus);
+        }) as Project[];
+
+        // Calculate Upcoming Tasks
+        const allIncompleteTasks: UpcomingTask[] = [];
+        allProjects.forEach(project => {
+            if (project.tasks && Array.isArray(project.tasks)) {
+                project.tasks.forEach(task => {
+                    if (task.status !== 'Completed') {
+                        allIncompleteTasks.push({
+                            task: task,
+                            projectTitle: project.title,
+                            projectId: project.id,
+                        });
+                    }
+                });
+            }
+        });
+
+        allIncompleteTasks.sort((a, b) => {
+            if (!a.task.deadline) return 1;
+            if (!b.task.deadline) return -1;
+            return a.task.deadline.getTime() - b.task.deadline.getTime();
+        });
+        setUpcomingTasks(allIncompleteTasks.slice(0, 3));
 
         // Calculate Resource Allocation Summary
         const summary: { [name: string]: number } = {};
@@ -228,48 +261,45 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
         <div className="lg:col-span-2">
-          <Card className="h-full">
+          <Card className="h-full flex flex-col">
             <CardHeader>
-              <CardTitle className="font-headline">Project Board</CardTitle>
-              <CardDescription>Drag to scroll through project statuses. Click a project to view details.</CardDescription>
+              <CardTitle className="font-headline">Upcoming Tasks</CardTitle>
+              <CardDescription>The next three tasks across all projects that need attention. Click a task to see project details.</CardDescription>
             </CardHeader>
-            <CardContent className="pl-0 pr-0">
-              <div className="overflow-x-auto">
-                <div className="flex gap-4 p-4 min-w-max">
-                  {projectStatuses.map(status => (
-                      <div key={status} className="w-[280px] flex-shrink-0">
-                          <div className="flex items-center justify-between p-2 rounded-t-lg">
-                              <div className="flex items-center gap-2">
-                                <span className={`h-2.5 w-2.5 rounded-full ${statusColors[status]}`} />
-                                <h3 className="font-semibold text-foreground text-sm">{status}</h3>
-                              </div>
-                              <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-md">
-                                  {projectsByStatus[status]?.length || 0}
-                              </span>
-                          </div>
-                          <div className="space-y-2 p-2 rounded-b-lg bg-muted/50 h-full min-h-[200px] max-h-[400px] overflow-y-auto">
-                              {(projectsByStatus[status] || []).map(project => (
-                                  <Link href={`/projects#${project.id}`} key={project.id} className="block">
-                                      <Card className="p-3 bg-card hover:bg-card/90 transition-all hover:shadow-md cursor-pointer">
-                                          <p className="font-medium text-sm text-card-foreground">{project.title}</p>
-                                          <div className="flex items-center justify-between mt-2">
-                                              <span className="text-xs text-muted-foreground">{project.progress}% complete</span>
-                                          </div>
-                                          <Progress value={project.progress} className="mt-2 h-1.5" />
-                                      </Card>
-                                  </Link>
-                              ))}
-                              {(!projectsByStatus[status] || projectsByStatus[status].length === 0) && (
-                                  <div className="text-center text-sm text-muted-foreground pt-10">
-                                      No projects here.
-                                  </div>
-                              )}
-                          </div>
+            <CardContent className="flex-grow">
+              {upcomingTasks.length > 0 ? (
+                <div className="space-y-4">
+                  {upcomingTasks.map(({ task, projectTitle, projectId }) => (
+                    <Link href={`/projects#${projectId}`} key={task.id} className="block group">
+                      <div className="p-3 rounded-lg border bg-card group-hover:bg-muted/50 transition-colors">
+                        <div className="flex justify-between items-start">
+                          <p className="font-medium text-sm text-card-foreground">{task.title}</p>
+                          {task.deadline && (
+                            <span className="text-xs text-muted-foreground flex-shrink-0 ml-4">{format(new Date(task.deadline), 'PP')}</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          In Project: <span className="font-medium">{projectTitle}</span>
+                        </p>
                       </div>
+                    </Link>
                   ))}
                 </div>
-              </div>
+              ) : (
+                <div className="flex flex-col justify-center items-center h-full text-center text-muted-foreground">
+                    <CheckCircle2 className="h-12 w-12 mb-2 text-green-500" />
+                    <h3 className="text-lg font-medium">All Tasks Completed</h3>
+                    <p className="text-sm">There are no pending tasks. Great job!</p>
+                </div>
+              )}
             </CardContent>
+            <CardFooter>
+                <Button asChild variant="outline" className="w-full">
+                    <Link href="/projects">
+                        View All Projects
+                    </Link>
+                </Button>
+            </CardFooter>
           </Card>
         </div>
 
@@ -345,24 +375,20 @@ const DashboardSkeleton = () => (
             <Skeleton className="h-6 w-1/2" />
             <Skeleton className="h-4 w-3/4" />
           </CardHeader>
-          <CardContent className="pl-0 pr-0">
-            <div className="overflow-x-auto">
-              <div className="flex gap-4 p-4 min-w-max">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="w-[280px] flex-shrink-0">
-                    <div className="flex items-center justify-between p-2">
-                      <Skeleton className="h-5 w-20" />
-                      <Skeleton className="h-5 w-8" />
-                    </div>
-                    <div className="space-y-2 p-2 rounded-b-lg bg-muted/50">
-                      <Skeleton className="h-20 w-full" />
-                      <Skeleton className="h-20 w-full" />
-                    </div>
+          <CardContent className="space-y-4">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="p-3 border rounded-lg space-y-2">
+                  <div className="flex justify-between items-center">
+                      <Skeleton className="h-4 w-3/5" />
+                      <Skeleton className="h-3 w-1/4" />
                   </div>
-                ))}
+                  <Skeleton className="h-3 w-1/3" />
               </div>
-            </div>
+            ))}
           </CardContent>
+          <CardFooter>
+            <Skeleton className="h-10 w-full" />
+          </CardFooter>
         </Card>
       </div>
       <div className="lg:col-span-1">
