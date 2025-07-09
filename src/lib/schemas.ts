@@ -45,6 +45,7 @@ export interface Project {
   title: string;
   status: "In Progress" | "On Hold" | "Completed" | "Planning" | "Delayed";
   description: string;
+  expectedOutcome?: string;
   progress: number;
   team: string[]; // Array of user UIDs
   companyId: string;
@@ -88,6 +89,7 @@ export type CreateUserOutput = z.infer<typeof CreateUserOutputSchema>;
 const ProjectCoreSchema = {
   title: z.string().min(1, "Title is required."),
   description: z.string().min(1, "Description is required."),
+  expectedOutcome: z.string().optional(),
   status: z.enum(["Planning", "In Progress", "On Hold", "Completed", "Delayed"]),
   priority: z.enum(['Low', 'Medium', 'High']).default('Medium'),
   deadline: z.date().nullable().optional(),
@@ -117,7 +119,7 @@ export const AddTaskInputSchema = z.object({
   projectId: z.string(),
   title: z.string().min(3, "Task title must be at least 3 characters."),
   assignedTo: z.array(z.string()).min(1, "Assign task to at least one member."),
-  deadline: z.date().nullable().optional(),
+  deadline: z.date().nullable(),
 });
 export type AddTaskInput = z.infer<typeof AddTaskInputSchema>;
 
