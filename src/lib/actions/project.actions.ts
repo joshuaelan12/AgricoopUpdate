@@ -161,7 +161,7 @@ export async function deleteProject(input: DeleteProjectInput, actorName: string
     }
 }
 
-export async function addTaskToProject(input: AddTaskInput, actor: { uid: string, displayName: string }) {
+export async function addTaskToProject(input: AddTaskInput, actor: { uid: string, displayName: string, role: string }) {
     try {
         const { projectId, ...taskData } = AddTaskInputSchema.parse(input);
         const { ref, data } = await getProjectAndValidate(projectId);
@@ -205,7 +205,7 @@ export async function addTaskToProject(input: AddTaskInput, actor: { uid: string
     }
 }
 
-export async function updateTask(input: UpdateTaskInput, actor: { uid: string, displayName: string }) {
+export async function updateTask(input: UpdateTaskInput, actor: { uid: string, displayName: string, role: string }) {
     try {
         const { projectId, taskId, ...updateData } = UpdateTaskInputSchema.parse(input);
         const { ref, data } = await getProjectAndValidate(projectId);
@@ -250,11 +250,25 @@ export async function updateTask(input: UpdateTaskInput, actor: { uid: string, d
         }
         
         if (updateData.status && updateData.status !== originalTask.status) {
+             // Notify assignees about the status change
              await createNotificationsForTeam(
                  updatedTask.assignedTo,
                  `The status of task "${updatedTask.title}" in project "${data.title}" was updated to "${updateData.status}".`, 
                  `/projects#${projectId}`, 
                  actor.uid
+            );
+
+            // Notify admins about the status change
+            const adminsRef = adminDb.collection('users').where('companyId', '==', data.companyId).where('role', '==', 'Admin');
+            const adminsSnap = await adminsRef.get();
+            const adminIds = adminsSnap.docs.map(doc => doc.id);
+
+            // Create notification for admins, but don't notify the person who made the change if they are also an admin.
+            await createNotificationsForTeam(
+                adminIds,
+                `${actor.displayName} updated the status for task "${updatedTask.title}" to "${updateData.status}" in project "${data.title}".`,
+                `/projects#${projectId}`,
+                actor.uid
             );
         }
         
