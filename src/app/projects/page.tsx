@@ -6,7 +6,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { db, storage } from "@/lib/firebase";
 import { collection, query, where, getDocs, Timestamp, doc } from 'firebase/firestore';
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
@@ -14,8 +14,8 @@ import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebas
 import { useIsMobile } from "@/hooks/use-mobile";
 
 
-import { createProject, addProjectComment, deleteProjectComment, updateProject, deleteProject, addTaskToProject, updateTask, deleteTask, addFileToProject, deleteFileFromProject, addFileToTask, deleteFileFromTask, allocateResourceToProject, deallocateResourceFromProject } from "@/lib/actions/project.actions";
-import { CreateProjectInputSchema, UpdateProjectInputSchema, AddProjectCommentInputSchema, AddTaskInputSchema, UpdateTaskInputSchema, AddFileToProjectInputSchema, AddFileToTaskInputSchema, AllocateResourceInputSchema } from "@/lib/schemas";
+import { createProject, addProjectComment, deleteProjectComment, updateProject, deleteProject, addTaskToProject, updateTask, deleteTask, addFileToProject, deleteFileFromProject, addFileToTask, deleteFileFromTask, allocateMultipleResourcesToProject, deallocateResourceFromProject } from "@/lib/actions/project.actions";
+import { CreateProjectInputSchema, UpdateProjectInputSchema, AddProjectCommentInputSchema, AddTaskInputSchema, UpdateTaskInputSchema, AddFileToProjectInputSchema, AddFileToTaskInputSchema, AllocateMultipleResourcesInputSchema } from "@/lib/schemas";
 import type { Project, Task, UserData, Comment, AddProjectCommentInput, UpdateProjectInput, AddTaskInput, UpdateTaskInput, ProjectFile, AllocatedResource } from "@/lib/schemas";
 import { useToast } from "@/hooks/use-toast";
 
@@ -557,9 +557,16 @@ function ResourceManagementTab({ project, allResources, actor, onActionComplete 
   const { toast } = useToast();
   const [isDeallocating, setIsDeallocating] = useState<string | null>(null);
 
-  const form = useForm<{ resourceId: string; quantity: number }>({
-    resolver: zodResolver(AllocateResourceInputSchema.omit({ projectId: true })),
-    defaultValues: { resourceId: '', quantity: 1 },
+  const form = useForm<{ allocations: { resourceId: string; quantity: number }[] }>({
+    resolver: zodResolver(AllocateMultipleResourcesInputSchema.pick({ allocations: true })),
+    defaultValues: {
+      allocations: [{ resourceId: '', quantity: 1 }],
+    },
+  });
+
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: 'allocations'
   });
 
   const availableResources = useMemo(() => {
@@ -567,17 +574,17 @@ function ResourceManagementTab({ project, allResources, actor, onActionComplete 
     return allResources.filter(r => !allocatedIds.has(r.id));
   }, [allResources, project.allocatedResources]);
 
-  const onAllocateSubmit = async (values: { resourceId: string; quantity: number }) => {
-    const result = await allocateResourceToProject({ ...values, projectId: project.id }, actor.displayName);
+  const onAllocateSubmit = async (values: { allocations: { resourceId: string; quantity: number }[] }) => {
+    const result = await allocateMultipleResourcesToProject({ projectId: project.id, allocations: values.allocations }, actor.displayName);
     if (result.success) {
-      toast({ title: "Resource Allocated" });
-      form.reset();
+      toast({ title: "Resources Allocated" });
+      form.reset({ allocations: [{ resourceId: '', quantity: 1 }] });
       onActionComplete();
     } else {
       toast({ variant: 'destructive', title: 'Allocation Failed', description: result.error });
     }
   };
-
+  
   const handleDeallocate = async (resourceId: string) => {
     setIsDeallocating(resourceId);
     const result = await deallocateResourceFromProject({ projectId: project.id, resourceId }, actor.displayName);
@@ -599,34 +606,56 @@ function ResourceManagementTab({ project, allResources, actor, onActionComplete 
       <CardContent className="p-4 space-y-6">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onAllocateSubmit)} className="p-4 border rounded-lg space-y-4 bg-muted/50">
-            <h4 className="font-medium">Allocate a New Resource</h4>
-            <div className="grid grid-cols-3 gap-4">
-              <FormField control={form.control} name="resourceId" render={({ field }) => (
-                <FormItem className="col-span-2">
-                  <FormLabel>Resource</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Select a resource" /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      {availableResources.map(r => (
-                        <SelectItem key={r.id} value={r.id}>{r.name} ({r.quantity} {r.unit} available)</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="quantity" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Quantity</FormLabel>
-                  <FormControl><Input type="number" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+            <h4 className="font-medium">Allocate New Resources</h4>
+            <div className="space-y-4">
+              {fields.map((field, index) => (
+                <div key={field.id} className="grid grid-cols-[1fr_auto_auto] gap-2 items-end">
+                  <FormField
+                    control={form.control}
+                    name={`allocations.${index}.resourceId`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className={cn(index !== 0 && "sr-only")}>Resource</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Select a resource" /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            {availableResources.map(r => (
+                              <SelectItem key={r.id} value={r.id}>{r.name} ({r.quantity} {r.unit} available)</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name={`allocations.${index}.quantity`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className={cn(index !== 0 && "sr-only")}>Quantity</FormLabel>
+                        <FormControl><Input type="number" {...field} className="w-24" /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                   <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} disabled={fields.length <= 1}>
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                    <span className="sr-only">Remove resource</span>
+                  </Button>
+                </div>
+              ))}
             </div>
-            <Button type="submit" disabled={form.formState.isSubmitting}>
-              {form.formState.isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
-              Allocate
-            </Button>
+            
+            <div className="flex items-center gap-4">
+                <Button type="button" variant="outline" size="sm" onClick={() => append({ resourceId: '', quantity: 1 })}>
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Add Another Resource
+                </Button>
+                <Button type="submit" disabled={form.formState.isSubmitting}>
+                  {form.formState.isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Allocate Selected'}
+                </Button>
+            </div>
           </form>
         </Form>
 
