@@ -59,7 +59,7 @@ const normalizeTasksArrayForWrite = (tasks: any[]): Task[] => {
         if (!task || typeof task !== 'object') return null;
 
         // Convert any Firestore Timestamps to JS Dates
-        const deadline = task.deadline?.toDate ? task.deadline.toDate() : task.deadline;
+        const deadline = task.deadline?.toDate ? task.deadline.toDate() : (task.deadline || null);
         
         const files = Array.isArray(task.files) ? task.files.map((file: any) => {
              if (!file || typeof file !== 'object') return null;
@@ -209,16 +209,17 @@ export async function updateTask(input: UpdateTaskInput, actor: { uid: string, d
     try {
         const { projectId, taskId, ...updateData } = UpdateTaskInputSchema.parse(input);
         const { ref, data } = await getProjectAndValidate(projectId);
-
-        // First, apply updates to the raw data
-        const tasksFromDb = (data.tasks || []).map((t: any) => ({ ...t })); // Deep copy to avoid mutation issues
+        
+        const tasksFromDb = (data.tasks || []).map((t: any) => ({ ...t }));
         const taskIndex = tasksFromDb.findIndex((task) => task.id === taskId);
 
         if (taskIndex === -1) {
             throw new Error("Task not found in project.");
         }
         
-        const originalTask = { ...tasksFromDb[taskIndex] }; // Copy original task for notifications
+        const originalTask = { ...tasksFromDb[taskIndex] };
+        
+        // First, apply updates to the raw data
         tasksFromDb[taskIndex] = { ...originalTask, ...updateData };
         
         // THEN, normalize the entire array to ensure consistent types before writing
@@ -516,7 +517,16 @@ export async function allocateResourceToProject(input: AllocateResourceInput, ac
             if (resourceData.quantity < quantity) throw new Error(`Not enough stock for ${resourceData.name}. Available: ${resourceData.quantity} ${resourceUnit}.`);
             if ((projectData.allocatedResources || []).some((r: any) => r.resourceId === resourceId)) throw new Error(`${resourceData.name} is already allocated. Please remove it first to adjust.`);
 
-            transaction.update(resourceRef, { quantity: FieldValue.increment(-quantity) });
+            const newQuantity = resourceData.quantity - quantity;
+            const updatePayload: { quantity: number; status?: string } = {
+                quantity: newQuantity,
+            };
+
+            if (newQuantity <= 0) {
+                updatePayload.status = "Out of Stock";
+            }
+
+            transaction.update(resourceRef, updatePayload);
             transaction.update(projectRef, { allocatedResources: FieldValue.arrayUnion({ resourceId, name: resourceData.name, quantity, unit: resourceUnit }) });
         });
         
@@ -542,15 +552,29 @@ export async function deallocateResourceFromProject(input: DeallocateResourceInp
 
         await adminDb.runTransaction(async (transaction) => {
             const projectDoc = await transaction.get(projectRef);
+            const resourceDoc = await transaction.get(resourceRef);
+
             if (!projectDoc.exists) throw new Error("Project not found.");
+            if (!resourceDoc.exists) throw new Error("Resource not found.");
             
             const projectData = projectDoc.data()!;
+            const resourceData = resourceDoc.data()!;
+            
             resourceToDeallocate = (projectData.allocatedResources || []).find((r: any) => r.resourceId === resourceId);
             projectName = projectData.title; companyId = projectData.companyId;
 
             if (!resourceToDeallocate) throw new Error("Resource was not found in this project's allocations.");
 
-            transaction.update(resourceRef, { quantity: FieldValue.increment(resourceToDeallocate.quantity) });
+            const newQuantity = resourceData.quantity + resourceToDeallocate.quantity;
+            const updatePayload: { quantity: number; status?: string } = {
+                quantity: newQuantity,
+            };
+
+            if (resourceData.status === 'Out of Stock' && newQuantity > 0) {
+                updatePayload.status = "In Stock";
+            }
+
+            transaction.update(resourceRef, updatePayload);
             transaction.update(projectRef, { allocatedResources: FieldValue.arrayRemove(resourceToDeallocate) });
         });
         

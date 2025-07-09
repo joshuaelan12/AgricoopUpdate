@@ -69,7 +69,7 @@ interface Resource {
 // --- CONSTANTS & HELPERS ---
 const statusBadgeVariant: { [key: string]: "default" | "secondary" | "destructive" | "outline" } = {
   "In Stock": "default", "Good": "default", "In Use": "default", "On Track": "default",
-  "Low Stock": "destructive", "Needs Maintenance": "destructive",
+  "Low Stock": "destructive", "Needs Maintenance": "destructive", "Out of Stock": "destructive",
 };
 
 const categoryIcons: { [key: string]: React.ReactNode } = {
@@ -82,7 +82,7 @@ const categoryIcons: { [key: string]: React.ReactNode } = {
 };
 
 const resourceCategories: Resource['category'][] = ["Inputs", "Equipment", "Vehicles", "Infrastructure", "Finance", "Other"];
-const resourceStatuses = ["In Stock", "Good", "In Use", "On Track", "Low Stock", "Needs Maintenance"];
+const resourceStatuses = ["In Stock", "Good", "In Use", "On Track", "Low Stock", "Needs Maintenance", "Out of Stock"];
 
 
 // --- ADD/EDIT DIALOG HELPER ---
