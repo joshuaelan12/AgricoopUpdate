@@ -229,6 +229,8 @@ function CreateProjectDialog({ actor, onActionComplete, isMobile }: { actor: { u
                                         </FormControl>
                                     </DialogTrigger>
                                     <DialogContent className="w-auto">
+                                        <DialogTitle className="sr-only">Pick a date</DialogTitle>
+                                        <DialogDescription className="sr-only">Select a deadline for the project.</DialogDescription>
                                         <Calendar mode="single" selected={field.value ?? undefined} onSelect={handleDateSelect} disabled={(date) => date < new Date("1900-01-01")} initialFocus />
                                     </DialogContent>
                                 </Dialog>
@@ -270,7 +272,7 @@ function CreateProjectDialog({ actor, onActionComplete, isMobile }: { actor: { u
 }
 
 // --- TASK MANAGEMENT DIALOGS ---
-function AddOrEditTaskDialog({ mode, project, task, users, actor, onActionComplete, isMobile }: { mode: 'add' | 'edit', project: Project, task?: Task, users: UserData[], actor: { uid: string, displayName: string }, onActionComplete: () => void, isMobile: boolean }) {
+function AddOrEditTaskDialog({ mode, project, task, users, actor, onActionComplete, isMobile }: { mode: 'add' | 'edit', project: Project, task?: Task, users: UserData[], actor: { uid: string, displayName: string, role: string }, onActionComplete: () => void, isMobile: boolean }) {
   const [open, setOpen] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const { toast } = useToast();
@@ -297,9 +299,12 @@ function AddOrEditTaskDialog({ mode, project, task, users, actor, onActionComple
   });
 
   const onSubmit = async (values: FormSchemaType) => {
+    // Ensure deadline is either a Date or null, not undefined
+    const deadline = values.deadline === undefined ? null : values.deadline;
+
     const result = isEdit 
       ? await updateTask(values as UpdateTaskInput, actor) 
-      : await addTaskToProject(values as AddTaskInput, actor);
+      : await addTaskToProject({ ...values, deadline }, actor);
       
     if (result.success) {
       toast({ title: `Task ${isEdit ? 'Updated' : 'Added'}` });
@@ -355,6 +360,8 @@ function AddOrEditTaskDialog({ mode, project, task, users, actor, onActionComple
                                     </FormControl>
                                 </DialogTrigger>
                                 <DialogContent className="w-auto">
+                                    <DialogTitle className="sr-only">Pick a date</DialogTitle>
+                                    <DialogDescription className="sr-only">Select a deadline for the task.</DialogDescription>
                                     <Calendar mode="single" selected={field.value ?? undefined} onSelect={handleDateSelect} disabled={(date) => date < new Date("1900-01-01")} initialFocus />
                                 </DialogContent>
                             </Dialog>
@@ -425,7 +432,7 @@ function FileManager({
   };
 
   const handleUpload = async () => {
-    if (!selectedFile || !storage) return;
+    if (!selectedFile || !storage || !db) return;
 
     setIsUploading(true);
     setUploadProgress(0);
@@ -453,9 +460,10 @@ function FileManager({
         const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
         const fileData = { id: fileId, name: selectedFile.name, url: downloadURL };
         
+        const cleanActor = { uid: actor.uid, displayName: actor.displayName };
         const result = taskId
-          ? await addFileToTask({ projectId, taskId, file: fileData, uploaderName: actor.displayName }, actor.displayName)
-          : await addFileToProject({ projectId, file: fileData, uploaderName: actor.displayName }, actor.displayName);
+          ? await addFileToTask({ projectId, taskId, file: fileData, uploaderName: cleanActor.displayName }, cleanActor.displayName)
+          : await addFileToProject({ projectId, file: fileData, uploaderName: cleanActor.displayName }, cleanActor.displayName);
         
         if (result.success) {
           toast({ title: "File Uploaded" });
@@ -472,9 +480,10 @@ function FileManager({
   
   const handleDelete = async (file: ProjectFile) => {
       setDeletingFileId(file.id);
+      const cleanActor = { uid: actor.uid, displayName: actor.displayName };
       const result = taskId
-        ? await deleteFileFromTask({ projectId, taskId, fileId: file.id }, actor.displayName)
-        : await deleteFileFromProject({ projectId, fileId: file.id }, actor.displayName);
+        ? await deleteFileFromTask({ projectId, taskId, fileId: file.id }, cleanActor.displayName)
+        : await deleteFileFromProject({ projectId, fileId: file.id }, cleanActor.displayName);
 
       if (result.success) {
           toast({ title: "File Deleted" });
@@ -665,7 +674,7 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [isDeletingComment, setIsDeletingComment] = useState<string | null>(null);
   const isManager = currentUser.role === 'Admin' || currentUser.role === 'Project Manager';
-  const cleanActor = { uid: currentUser.uid, displayName: currentUser.displayName };
+  const cleanActor = { uid: currentUser.uid, displayName: currentUser.displayName, role: currentUser.role };
 
 
   const handleTaskStatusChange = async (taskId: string, newStatus: Task['status']) => {
@@ -1017,6 +1026,8 @@ function ProjectActions({ project, actorName, onActionComplete, isMobile }: { pr
                                         </FormControl>
                                     </DialogTrigger>
                                     <DialogContent className="w-auto">
+                                        <DialogTitle className="sr-only">Pick a date</DialogTitle>
+                                        <DialogDescription className="sr-only">Select a deadline for the project.</DialogDescription>
                                         <Calendar mode="single" selected={field.value ?? undefined} onSelect={handleDateSelect} initialFocus />
                                     </DialogContent>
                                 </Dialog>
