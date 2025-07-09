@@ -151,6 +151,7 @@ function CreateProjectDialog({ actor, onActionComplete, isMobile }: { actor: { u
     defaultValues: {
       title: "",
       description: "",
+      expectedOutcome: "",
       status: "Planning",
       companyId: actor.companyId,
       priority: 'Medium',
@@ -200,6 +201,9 @@ function CreateProjectDialog({ actor, onActionComplete, isMobile }: { actor: { u
             )}/>
             <FormField control={form.control} name="description" render={({ field }) => (
               <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea placeholder="Describe the project's goals and scope." {...field} /></FormControl><FormMessage /></FormItem>
+            )}/>
+            <FormField control={form.control} name="expectedOutcome" render={({ field }) => (
+                <FormItem><FormLabel>Expected Outcome</FormLabel><FormControl><Textarea placeholder="Describe the desired results or deliverables of the project." {...field} /></FormControl><FormMessage /></FormItem>
             )}/>
             <div className="grid grid-cols-2 gap-4">
               <FormField control={form.control} name="status" render={({ field }) => (
@@ -531,7 +535,7 @@ function FileManager({
                          <AlertDialog>
                             <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" disabled={deletingFileId === file.id}><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
                             <AlertDialogContent>
-                                <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete the file.</AlertDialogDescription></AlertDialogHeader>
+                                <AlertDialogHeader><DialogTitle>Are you sure?</DialogTitle><AlertDialogDescription>This will permanently delete the file.</AlertDialogDescription></AlertDialogHeader>
                                 <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                                     <AlertDialogAction onClick={() => handleDelete(file)}>{deletingFileId === file.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Delete</AlertDialogAction>
@@ -775,6 +779,12 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
             <div>
               <DialogTitle className="font-headline text-3xl">{project.title}</DialogTitle>
               <DialogDescription className="mt-1">{project.description}</DialogDescription>
+              {project.expectedOutcome && (
+                <div className="mt-4">
+                  <h4 className="text-sm font-semibold text-foreground">Expected Outcome</h4>
+                  <p className="text-sm text-muted-foreground">{project.expectedOutcome}</p>
+                </div>
+              )}
             </div>
              <ProjectActions project={project} actorName={currentUser.displayName} onActionComplete={onActionComplete} isMobile={isMobile} />
           </div>
@@ -976,6 +986,7 @@ function ProjectActions({ project, actorName, onActionComplete, isMobile }: { pr
       projectId: project.id,
       title: project.title,
       description: project.description,
+      expectedOutcome: project.expectedOutcome || "",
       status: project.status,
       priority: project.priority || 'Medium',
       deadline: project.deadline ? new Date(project.deadline) : null,
@@ -1026,6 +1037,9 @@ function ProjectActions({ project, actorName, onActionComplete, isMobile }: { pr
             )}/>
             <FormField control={form.control} name="description" render={({ field }) => (
               <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
+            )}/>
+            <FormField control={form.control} name="expectedOutcome" render={({ field }) => (
+                <FormItem><FormLabel>Expected Outcome</FormLabel><FormControl><Textarea placeholder="Describe the desired results or deliverables of the project." {...field} /></FormControl><FormMessage /></FormItem>
             )}/>
              <div className="grid grid-cols-2 gap-4">
               <FormField control={form.control} name="status" render={({ field }) => (
@@ -1166,6 +1180,7 @@ export default function ProjectsPage() {
             return {
                 id: doc.id,
                 ...data,
+                expectedOutcome: data.expectedOutcome || "",
                 deadline: toDate(data.deadline),
                 comments,
                 files,
@@ -1203,7 +1218,7 @@ export default function ProjectsPage() {
           <p className="text-muted-foreground">Browse and manage all projects within your cooperative.</p>
         </div>
          {user && (user.role === 'Admin' || user.role === 'Project Manager') && !loading && (
-          <CreateProjectDialog actor={user} onActionComplete={fetchData} isMobile={isMobile} />
+          <CreateProjectDialog actor={{uid: user.uid, displayName: user.displayName, companyId: user.companyId}} onActionComplete={fetchData} isMobile={isMobile} />
         )}
       </div>
 
@@ -1245,7 +1260,7 @@ export default function ProjectsPage() {
                         {project.team.length > 5 && <Avatar className="h-8 w-8 border-2 border-card"><AvatarFallback>+{project.team.length - 5}</AvatarFallback></Avatar>}
                         </div>
                     </div>
-                    <ProjectDetailsDialog project={project} users={users} resources={resources} currentUser={user} onActionComplete={fetchData} isMobile={isMobile} />
+                    <ProjectDetailsDialog project={project} users={users} resources={resources} currentUser={{uid: user.uid, displayName: user.displayName, role: user.role}} onActionComplete={fetchData} isMobile={isMobile} />
                 </CardFooter>
               </Card>
             )
