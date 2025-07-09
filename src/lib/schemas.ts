@@ -240,12 +240,14 @@ export type SuggestChecklistOutput = z.infer<typeof SuggestChecklistOutputSchema
 
 
 // --- Resource Allocation Schemas ---
-export const AllocateResourceInputSchema = z.object({
-  projectId: z.string(),
-  resourceId: z.string(),
-  quantity: z.coerce.number().positive("Quantity must be a positive number."),
+export const AllocateMultipleResourcesInputSchema = z.object({
+    projectId: z.string(),
+    allocations: z.array(z.object({
+        resourceId: z.string().min(1, "Please select a resource."),
+        quantity: z.coerce.number().positive("Quantity must be a positive number."),
+    })).min(1, "Please add at least one resource to allocate."),
 });
-export type AllocateResourceInput = z.infer<typeof AllocateResourceInputSchema>;
+export type AllocateMultipleResourcesInput = z.infer<typeof AllocateMultipleResourcesInputSchema>;
 
 export const DeallocateResourceInputSchema = z.object({
   projectId: z.string(),

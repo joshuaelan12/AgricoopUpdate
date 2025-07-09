@@ -12,7 +12,7 @@ import {
   DeleteProjectInputSchema,
   AddProjectOutputInputSchema,
   DeleteProjectOutputInputSchema,
-  AllocateResourceInputSchema,
+  AllocateMultipleResourcesInputSchema,
   DeallocateResourceInputSchema,
   AddTaskInputSchema,
   UpdateTaskInputSchema,
@@ -28,7 +28,7 @@ import {
   type DeleteProjectInput,
   type AddProjectOutputInput,
   type DeleteProjectOutputInput,
-  type AllocateResourceInput,
+  type AllocateMultipleResourcesInput,
   type DeallocateResourceInput,
   type AddTaskInput,
   type UpdateTaskInput,
@@ -505,53 +505,70 @@ export async function deleteProjectOutput(input: DeleteProjectOutputInput, actor
     }
 }
 
-export async function allocateResourceToProject(input: AllocateResourceInput, actorName: string) {
+export async function allocateMultipleResourcesToProject(input: AllocateMultipleResourcesInput, actorName: string) {
     try {
-        const { projectId, resourceId, quantity } = AllocateResourceInputSchema.parse(input);
+        const { projectId, allocations } = AllocateMultipleResourcesInputSchema.parse(input);
         const projectRef = adminDb.collection('projects').doc(projectId);
-        const resourceRef = adminDb.collection('resources').doc(resourceId);
 
-        let resourceName = "Unknown Resource", projectName = "Unknown Project", companyId = "", resourceUnit = "units";
+        let projectName = "Unknown Project", companyId = "";
+        const allocatedResourceNames: string[] = [];
 
         await adminDb.runTransaction(async (transaction) => {
-            const resourceDoc = await transaction.get(resourceRef);
             const projectDoc = await transaction.get(projectRef);
-
-            if (!resourceDoc.exists) throw new Error("Resource not found.");
             if (!projectDoc.exists) throw new Error("Project not found.");
 
-            const resourceData = resourceDoc.data()!;
             const projectData = projectDoc.data()!;
-            
-            resourceName = resourceData.name; 
-            projectName = projectData.title; 
+            projectName = projectData.title;
             companyId = projectData.companyId;
-            resourceUnit = resourceData.unit;
 
-            if (resourceData.quantity < quantity) throw new Error(`Not enough stock for ${resourceData.name}. Available: ${resourceData.quantity} ${resourceUnit}.`);
-            if ((projectData.allocatedResources || []).some((r: any) => r.resourceId === resourceId)) throw new Error(`${resourceData.name} is already allocated. Please remove it first to adjust.`);
+            const allocatedResourceIds = new Set((projectData.allocatedResources || []).map((r: any) => r.resourceId));
 
-            const newQuantity = resourceData.quantity - quantity;
-            const updatePayload: { quantity: number; status?: string } = {
-                quantity: newQuantity,
-            };
+            const resourceRefs = allocations.map(a => adminDb.collection('resources').doc(a.resourceId));
+            const resourceDocs = await transaction.getAll(...resourceRefs);
 
-            if (newQuantity <= 0) {
-                updatePayload.status = "Out of Stock";
+            for (let i = 0; i < allocations.length; i++) {
+                const allocation = allocations[i];
+                const resourceDoc = resourceDocs[i];
+                const resourceRef = resourceRefs[i];
+                
+                if (!resourceDoc.exists) throw new Error(`Resource with ID ${allocation.resourceId} not found.`);
+                
+                const resourceData = resourceDoc.data()!;
+                
+                if (resourceData.quantity < allocation.quantity) throw new Error(`Not enough stock for ${resourceData.name}. Available: ${resourceData.quantity}.`);
+                if (allocatedResourceIds.has(allocation.resourceId)) throw new Error(`${resourceData.name} is already allocated. Please remove it first to adjust.`);
+
+                const newQuantity = resourceData.quantity - allocation.quantity;
+                const updatePayload: { quantity: number; status?: string } = { quantity: newQuantity };
+                if (newQuantity <= 0) {
+                    updatePayload.status = "Out of Stock";
+                }
+
+                transaction.update(resourceRef, updatePayload);
+                transaction.update(projectRef, { 
+                    allocatedResources: FieldValue.arrayUnion({ 
+                        resourceId: allocation.resourceId, 
+                        name: resourceData.name, 
+                        quantity: allocation.quantity, 
+                        unit: resourceData.unit 
+                    }) 
+                });
+                
+                allocatedResourceNames.push(`${allocation.quantity} ${resourceData.unit} of ${resourceData.name}`);
             }
-
-            transaction.update(resourceRef, updatePayload);
-            transaction.update(projectRef, { allocatedResources: FieldValue.arrayUnion({ resourceId, name: resourceData.name, quantity, unit: resourceUnit }) });
         });
         
-        await logActivity(companyId, `${actorName} allocated ${quantity} ${resourceUnit} of ${resourceName} to project "${projectName}".`);
+        if (allocatedResourceNames.length > 0) {
+            await logActivity(companyId, `${actorName} allocated ${allocatedResourceNames.join(', ')} to project "${projectName}".`);
+        }
+        
         revalidatePath('/projects');
         revalidatePath('/resources');
         revalidatePath('/');
 
         return { success: true };
     } catch (error: any) {
-        console.error("Error allocating resource:", error);
+        console.error("Error allocating multiple resources:", error);
         return { success: false, error: error.message || "An unknown error occurred." };
     }
 }
