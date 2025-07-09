@@ -1,3 +1,4 @@
+
 'use server';
 
 import { z } from 'zod';
@@ -9,11 +10,18 @@ import { logActivity } from './activity.actions';
 export async function createResource(input: CreateResourceInput, actorName: string) {
     try {
         const validatedInput = CreateResourceInputSchema.parse(input);
+        const { quantity } = validatedInput;
+
+        let status = validatedInput.status;
+        if (quantity <= 0) {
+            status = "Out of Stock";
+        }
 
         const newResourceRef = adminDb.collection('resources').doc();
         
         await newResourceRef.set({
             ...validatedInput,
+            status,
             createdAt: FieldValue.serverTimestamp(),
         });
         
@@ -39,10 +47,23 @@ export async function updateResource(input: UpdateResourceInput, actorName: stri
         const resourceRef = adminDb.collection('resources').doc(id);
         const resourceDoc = await resourceRef.get();
         if (!resourceDoc.exists) throw new Error("Resource not found.");
-        const companyId = resourceDoc.data()!.companyId;
+        const resourceData = resourceDoc.data()!;
+        const companyId = resourceData.companyId;
+
+        const finalUpdateData = { ...updateData };
+
+        // Automatically manage status based on quantity
+        if (finalUpdateData.quantity !== undefined) {
+            if (finalUpdateData.quantity <= 0) {
+                finalUpdateData.status = "Out of Stock";
+            } else if (resourceData.quantity <= 0 && finalUpdateData.quantity > 0) {
+                // If it was out of stock and now has items, set it to "In Stock"
+                finalUpdateData.status = "In Stock";
+            }
+        }
         
         await resourceRef.update({
-            ...updateData,
+            ...finalUpdateData,
             updatedAt: FieldValue.serverTimestamp(),
         });
         

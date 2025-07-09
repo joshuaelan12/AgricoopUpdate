@@ -1,3 +1,4 @@
+
 import { z } from 'zod';
 
 // --- Base Data Interfaces (for use in components) ---
@@ -181,7 +182,7 @@ export type DeleteProjectOutputInput = z.infer<typeof DeleteProjectOutputInputSc
 
 // --- Resource Schemas ---
 const resourceCategoryEnum = z.enum(["Inputs", "Equipment", "Vehicles", "Infrastructure", "Finance", "Other"]);
-const resourceStatusEnum = z.enum(["In Stock", "Good", "In Use", "On Track", "Low Stock", "Needs Maintenance"]);
+const resourceStatusEnum = z.enum(["In Stock", "Good", "In Use", "On Track", "Low Stock", "Needs Maintenance", "Out of Stock"]);
 
 export const CreateResourceInputSchema = z.object({
   name: z.string().min(1, "Resource name is required."),
