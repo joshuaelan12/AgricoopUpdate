@@ -71,6 +71,7 @@ const normalizeTasksArrayForWrite = (tasks: any[]): Task[] => {
         return {
             id: task.id,
             title: task.title,
+            expectedOutcome: task.expectedOutcome || "",
             status: task.status,
             assignedTo: task.assignedTo || [],
             deadline: deadline,
@@ -169,6 +170,7 @@ export async function addTaskToProject(input: AddTaskInput, actor: { uid: string
         const newTask: Task = {
             id: adminDb.collection('projects').doc().id,
             title: taskData.title,
+            expectedOutcome: taskData.expectedOutcome || "",
             assignedTo: taskData.assignedTo,
             deadline: taskData.deadline ?? null,
             status: 'To Do',

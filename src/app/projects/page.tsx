@@ -291,12 +291,14 @@ function AddOrEditTaskDialog({ mode, project, task, users, actor, onActionComple
         projectId: project.id,
         taskId: task.id,
         title: task.title,
+        expectedOutcome: task.expectedOutcome || "",
         assignedTo: task.assignedTo,
         deadline: task.deadline ? new Date(task.deadline) : null,
         status: task.status,
     } : {
         projectId: project.id,
         title: "",
+        expectedOutcome: "",
         assignedTo: [],
         deadline: null,
     },
@@ -340,6 +342,9 @@ function AddOrEditTaskDialog({ mode, project, task, users, actor, onActionComple
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField control={form.control} name="title" render={({ field }) => (
               <FormItem><FormLabel>Task Title</FormLabel><FormControl><Input placeholder="e.g., Prepare soil for planting" {...field} /></FormControl><FormMessage /></FormItem>
+            )}/>
+            <FormField control={form.control} name="expectedOutcome" render={({ field }) => (
+                <FormItem><FormLabel>Expected Outcome</FormLabel><FormControl><Textarea placeholder="Describe the desired result of this task." {...field} /></FormControl><FormMessage /></FormItem>
             )}/>
              <div className="grid grid-cols-2 gap-4">
                <FormField control={form.control} name="assignedTo" render={({ field }) => (
@@ -761,7 +766,7 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
   };
 
   const sortedComments = useMemo(() => {
-    return (project.comments || []).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return (project.comments || []).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   }, [project.comments]);
 
   const sortedProjectFiles = useMemo(() => {
@@ -830,6 +835,11 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
                                                 </div>
                                             )}
                                         </div>
+                                        {task.expectedOutcome && (
+                                            <div className="mt-2 text-sm text-muted-foreground border-l-2 pl-2">
+                                                {task.expectedOutcome}
+                                            </div>
+                                        )}
                                     </div>
                                      <div className="flex items-center gap-2 flex-shrink-0">
                                         <Select value={task.status} onValueChange={(newStatus: Task['status']) => handleTaskStatusChange(task.id, newStatus)} disabled={!canUpdateTask}>
@@ -1148,13 +1158,16 @@ export default function ProjectsPage() {
             // Helper to safely convert Firestore Timestamps to JS Dates
             const toDate = (timestamp: any): Date | null => {
                 if (!timestamp) return null;
-                return timestamp.toDate ? timestamp.toDate() : (timestamp instanceof Date ? timestamp : null);
+                // Handle both Timestamp objects and already-converted Date strings
+                if (timestamp.toDate) return timestamp.toDate();
+                if (typeof timestamp === 'string' || timestamp instanceof Date) return new Date(timestamp);
+                return null;
             };
 
             // Helper for required dates, providing a fallback to prevent crashes
             const toDateRequired = (timestamp: any): Date => {
-                if (!timestamp) return new Date();
-                return timestamp.toDate ? timestamp.toDate() : (timestamp instanceof Date ? timestamp : new Date());
+                const date = toDate(timestamp);
+                return date || new Date(); // Fallback to now if conversion fails
             };
             
             const comments: Comment[] = (data.comments || []).map((c: any) => ({
@@ -1169,6 +1182,7 @@ export default function ProjectsPage() {
             
             const tasks: Task[] = (data.tasks || []).map((t: any) => ({
                 ...t,
+                expectedOutcome: t.expectedOutcome || "",
                 deadline: toDate(t.deadline),
                 files: (t.files || []).map((f: any) => ({
                     ...f,

@@ -24,6 +24,7 @@ export const TaskStatusSchema = z.enum(['To Do', 'In Progress', 'Completed']);
 export const TaskSchema = z.object({
   id: z.string(),
   title: z.string().min(1, "Task title is required."),
+  expectedOutcome: z.string().optional(),
   assignedTo: z.array(z.string()),
   deadline: z.date().nullable(),
   status: TaskStatusSchema,
@@ -118,6 +119,7 @@ export type DeleteProjectInput = z.infer<typeof DeleteProjectInputSchema>;
 export const AddTaskInputSchema = z.object({
   projectId: z.string(),
   title: z.string().min(3, "Task title must be at least 3 characters."),
+  expectedOutcome: z.string().optional(),
   assignedTo: z.array(z.string()).min(1, "Assign task to at least one member."),
   deadline: z.date().nullable(),
 });
@@ -127,6 +129,7 @@ export const UpdateTaskInputSchema = z.object({
   projectId: z.string(),
   taskId: z.string(),
   title: z.string().min(3, "Task title must be at least 3 characters.").optional(),
+  expectedOutcome: z.string().optional(),
   assignedTo: z.array(z.string()).min(1, "Assign task to at least one member.").optional(),
   deadline: z.date().nullable().optional(),
   status: TaskStatusSchema.optional(),
