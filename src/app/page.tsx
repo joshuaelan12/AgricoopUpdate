@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { CheckCircle2 } from 'lucide-react';
 import type { AllocatedResource, Project, Task } from '@/lib/schemas';
+import { cn } from '@/lib/utils';
 
 
 // --- DATA INTERFACES ---
@@ -222,13 +223,13 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={cn({ "bg-destructive text-destructive-foreground": stats?.resourceAlerts > 0 })}>
           <CardHeader className="pb-2">
-            <CardDescription className="font-headline">Resources</CardDescription>
+            <CardDescription className={cn("font-headline", { "text-destructive-foreground/80": stats?.resourceAlerts > 0 })}>Resources</CardDescription>
             <CardTitle className="text-4xl font-headline">Alerts: {stats?.resourceAlerts ?? 0}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xs text-muted-foreground truncate">
+            <div className={cn("text-xs text-muted-foreground truncate", { "text-destructive-foreground/70": stats?.resourceAlerts > 0 })}>
               {resourceAlertText()}
             </div>
           </CardContent>
