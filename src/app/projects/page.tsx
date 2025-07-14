@@ -12,6 +12,7 @@ import { z } from "zod";
 import { format } from "date-fns";
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { generateProjectPdf } from "@/lib/pdf-generator";
 
 
 import { createProject, addProjectComment, deleteProjectComment, updateProject, deleteProject, addTaskToProject, updateTask, deleteTask, addFileToProject, deleteFileFromProject, addFileToTask, deleteFileFromTask, allocateMultipleResourcesToProject, deallocateResourceFromProject } from "@/lib/actions/project.actions";
@@ -71,7 +72,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
-import { FolderKanban, PlusCircle, Users as UsersIcon, Loader2, MessageSquare, Trash2, MoreVertical, Edit, CalendarIcon, Check, GripVertical, Grip, ChevronDown, ListTodo, Paperclip, UploadCloud, File as FileIcon, Download, Package } from "lucide-react";
+import { FolderKanban, PlusCircle, Users as UsersIcon, Loader2, MessageSquare, Trash2, MoreVertical, Edit, CalendarIcon, Check, GripVertical, Grip, ChevronDown, ListTodo, Paperclip, UploadCloud, File as FileIcon, Download, Package, FileText } from "lucide-react";
 
 // --- HELPER FUNCTIONS & CONSTANTS ---
 const getInitials = (name: string | undefined) => {
@@ -771,11 +772,11 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
   }
 
   const sortedComments = useMemo(() => {
-    return (project.comments || []).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    return [...(project.comments || [])].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   }, [project.comments]);
 
   const sortedProjectFiles = useMemo(() => {
-    return (project.files || []).sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+    return [...(project.files || [])].sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
   }, [project.files]);
 
   return (
@@ -796,7 +797,7 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
                 </div>
               )}
             </div>
-             <ProjectActions project={project} actorName={currentUser.displayName} onActionComplete={handleActionComplete} isMobile={isMobile} />
+             <ProjectActions project={project} users={users} actorName={currentUser.displayName} onActionComplete={handleActionComplete} isMobile={isMobile} />
           </div>
           <div className="flex items-center gap-4 pt-2 text-sm">
             <Badge className={`${statusColors[project.status]} text-primary-foreground`}>{project.status}</Badge>
@@ -977,7 +978,7 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
 
 
 // --- EDIT/DELETE PROJECT ACTIONS ---
-function ProjectActions({ project, actorName, onActionComplete, isMobile }: { project: Project; actorName: string; onActionComplete: () => void; isMobile: boolean; }) {
+function ProjectActions({ project, users, actorName, onActionComplete, isMobile }: { project: Project; users: { [uid: string]: UserData }; actorName: string; onActionComplete: () => void; isMobile: boolean; }) {
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -995,6 +996,10 @@ function ProjectActions({ project, actorName, onActionComplete, isMobile }: { pr
     setIsDeleting(false);
   };
   
+  const handleDownloadReport = () => {
+    generateProjectPdf(project, users);
+  };
+
    const form = useForm<UpdateProjectInput>({
     resolver: zodResolver(UpdateProjectInputSchema),
     defaultValues: {
@@ -1029,6 +1034,7 @@ function ProjectActions({ project, actorName, onActionComplete, isMobile }: { pr
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onSelect={() => setIsEditOpen(true)}><Edit className="mr-2 h-4 w-4" /><span>Edit Project</span></DropdownMenuItem>
+        <DropdownMenuItem onSelect={handleDownloadReport}><FileText className="mr-2 h-4 w-4" /><span>Download Report (PDF)</span></DropdownMenuItem>
         <DropdownMenuSeparator />
         <AlertDialog>
           <AlertDialogTrigger asChild>
