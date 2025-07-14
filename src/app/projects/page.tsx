@@ -706,7 +706,7 @@ function ResourceManagementTab({ project, allResources, actor, onActionComplete 
 
 
 // --- PROJECT DETAILS DIALOG ---
-function ProjectDetailsDialog({ project, users, resources, currentUser, onActionComplete }: { project: Project, users: { [uid: string]: UserData }, resources: Resource[], currentUser: {uid: string, displayName: string, role: string}, onActionComplete: (projectId?: string) => void, isMobile: boolean }) {
+function ProjectDetailsDialog({ project, users, resources, currentUser, onActionComplete, isMobile }: { project: Project, users: { [uid: string]: UserData }, resources: Resource[], currentUser: {uid: string, displayName: string, role: string}, onActionComplete: (projectId?: string) => void, isMobile: boolean }) {
   const { toast } = useToast();
   const [isDeletingTask, setIsDeletingTask] = useState<string | null>(null);
   const [newComment, setNewComment] = useState('');
