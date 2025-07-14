@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { db, storage } from "@/lib/firebase";
 import { collection, query, where, getDocs, Timestamp, doc } from 'firebase/firestore';
@@ -307,10 +307,11 @@ function AddOrEditTaskDialog({ mode, project, task, users, actor, onActionComple
   const onSubmit = async (values: FormSchemaType) => {
     // Ensure deadline is either a Date or null, not undefined
     const deadline = values.deadline === undefined ? null : values.deadline;
+    const cleanActor = { uid: actor.uid, displayName: actor.displayName };
 
     const result = isEdit 
-      ? await updateTask(values as UpdateTaskInput, actor) 
-      : await addTaskToProject({ ...values, deadline }, actor);
+      ? await updateTask(values as UpdateTaskInput, { ...actor, ...cleanActor }) 
+      : await addTaskToProject({ ...values, deadline }, { ...actor, ...cleanActor });
       
     if (result.success) {
       toast({ title: `Task ${isEdit ? 'Updated' : 'Added'}` });
@@ -540,7 +541,7 @@ function FileManager({
                          <AlertDialog>
                             <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" disabled={deletingFileId === file.id}><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
                             <AlertDialogContent>
-                                <AlertDialogHeader><DialogTitle>Are you sure?</DialogTitle><AlertDialogDescription>This will permanently delete the file.</AlertDialogDescription></AlertDialogHeader>
+                                <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete the file.</AlertDialogDescription></AlertDialogHeader>
                                 <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                                     <AlertDialogAction onClick={() => handleDelete(file)}>{deletingFileId === file.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Delete</AlertDialogAction>
@@ -705,7 +706,7 @@ function ResourceManagementTab({ project, allResources, actor, onActionComplete 
 
 
 // --- PROJECT DETAILS DIALOG ---
-function ProjectDetailsDialog({ project, users, resources, currentUser, onActionComplete, isMobile }: { project: Project, users: { [uid: string]: UserData }, resources: Resource[], currentUser: {uid: string, displayName: string, role: string}, onActionComplete: () => void, isMobile: boolean }) {
+function ProjectDetailsDialog({ project, users, resources, currentUser, onActionComplete }: { project: Project, users: { [uid: string]: UserData }, resources: Resource[], currentUser: {uid: string, displayName: string, role: string}, onActionComplete: (projectId?: string) => void, isMobile: boolean }) {
   const { toast } = useToast();
   const [isDeletingTask, setIsDeletingTask] = useState<string | null>(null);
   const [newComment, setNewComment] = useState('');
@@ -719,7 +720,7 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
     const result = await updateTask({ projectId: project.id, taskId, status: newStatus }, cleanActor);
     if (result.success) {
       toast({ title: "Task Status Updated" });
-      onActionComplete();
+      onActionComplete(project.id);
     } else {
       toast({ variant: "destructive", title: "Update Failed", description: result.error });
     }
@@ -730,7 +731,7 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
     const result = await deleteTask({ projectId: project.id, taskId }, currentUser.displayName);
      if (result.success) {
       toast({ title: "Task Deleted" });
-      onActionComplete();
+      onActionComplete(project.id);
     } else {
       toast({ variant: "destructive", title: "Deletion Failed", description: result.error });
     }
@@ -746,7 +747,7 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
       if (result.success) {
           setNewComment('');
           toast({ title: "Comment Added" });
-          onActionComplete();
+          onActionComplete(project.id);
       } else {
           toast({ variant: "destructive", title: "Failed to post comment", description: result.error });
       }
@@ -758,12 +759,16 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
     const result = await deleteProjectComment({ projectId: project.id, commentId, userId: currentUser.uid });
     if (result.success) {
       toast({ title: "Comment Deleted" });
-      onActionComplete();
+      onActionComplete(project.id);
     } else {
       toast({ variant: "destructive", title: "Failed to delete comment", description: result.error });
     }
     setIsDeletingComment(null);
   };
+  
+  const handleActionComplete = () => {
+    onActionComplete(project.id);
+  }
 
   const sortedComments = useMemo(() => {
     return (project.comments || []).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -791,7 +796,7 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
                 </div>
               )}
             </div>
-             <ProjectActions project={project} actorName={currentUser.displayName} onActionComplete={onActionComplete} isMobile={isMobile} />
+             <ProjectActions project={project} actorName={currentUser.displayName} onActionComplete={handleActionComplete} isMobile={isMobile} />
           </div>
           <div className="flex items-center gap-4 pt-2 text-sm">
             <Badge className={`${statusColors[project.status]} text-primary-foreground`}>{project.status}</Badge>
@@ -815,7 +820,7 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
                         <CardTitle className="text-xl font-headline">Task List</CardTitle>
                         <CardDescription>Track and manage all tasks for this project.</CardDescription>
                     </div>
-                    {isManager && <AddOrEditTaskDialog mode="add" project={project} users={Object.values(users)} actor={cleanActor} onActionComplete={onActionComplete} isMobile={isMobile} />}
+                    {isManager && <AddOrEditTaskDialog mode="add" project={project} users={Object.values(users)} actor={cleanActor} onActionComplete={handleActionComplete} isMobile={isMobile} />}
                 </CardHeader>
                 <CardContent className="p-4 space-y-4">
                     {project.tasks?.length > 0 ? (
@@ -851,7 +856,7 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
-                                                    <AddOrEditTaskDialog mode="edit" project={project} task={task} users={Object.values(users)} actor={cleanActor} onActionComplete={onActionComplete} isMobile={isMobile} />
+                                                    <AddOrEditTaskDialog mode="edit" project={project} task={task} users={Object.values(users)} actor={cleanActor} onActionComplete={handleActionComplete} isMobile={isMobile} />
                                                     <DropdownMenuSeparator />
                                                      <AlertDialog>
                                                         <AlertDialogTrigger asChild><DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive"><Trash2 className="mr-2 h-4 w-4" /> Delete Task</DropdownMenuItem></AlertDialogTrigger>
@@ -873,7 +878,7 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
                                     canUpload={canUpdateTask}
                                     canDelete={isManager}
                                     actor={cleanActor}
-                                    onActionComplete={onActionComplete}
+                                    onActionComplete={handleActionComplete}
                                 />
                                 </Card>
                             )
@@ -891,7 +896,7 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
                 project={project}
                 allResources={resources}
                 actor={cleanActor}
-                onActionComplete={onActionComplete}
+                onActionComplete={handleActionComplete}
               />
             ) : (
                <Card className="mt-2 border-0 shadow-none">
@@ -915,7 +920,7 @@ function ProjectDetailsDialog({ project, users, resources, currentUser, onAction
                         canUpload={isManager}
                         canDelete={isManager}
                         actor={cleanActor}
-                        onActionComplete={onActionComplete}
+                        onActionComplete={handleActionComplete}
                     />
                 </CardContent>
             </Card>
@@ -1129,100 +1134,119 @@ export default function ProjectsPage() {
   const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
   const isMobile = useIsMobile();
+  
+  // Helper to safely convert Firestore Timestamps to JS Dates
+  const toDate = (timestamp: any): Date | null => {
+    if (!timestamp) return null;
+    // Handle both Timestamp objects and already-converted Date strings
+    if (timestamp.toDate) return timestamp.toDate();
+    if (typeof timestamp === 'string' || timestamp instanceof Date) return new Date(timestamp);
+    return null;
+  };
 
-  const fetchData = async () => {
+  // Helper for required dates, providing a fallback to prevent crashes
+  const toDateRequired = (timestamp: any): Date => {
+    const date = toDate(timestamp);
+    return date || new Date(); // Fallback to now if conversion fails
+  };
+  
+  const parseProjectDoc = (doc: any): Project => {
+    const data = doc.data();
+    const comments: Comment[] = (data.comments || []).map((c: any) => ({
+        ...c,
+        createdAt: toDateRequired(c.createdAt),
+    }));
+    
+    const files: ProjectFile[] = (data.files || []).map((f: any) => ({
+        ...f,
+        uploadedAt: toDateRequired(f.uploadedAt),
+    }));
+    
+    const tasks: Task[] = (data.tasks || []).map((t: any) => ({
+        ...t,
+        expectedOutcome: t.expectedOutcome || "",
+        deadline: toDate(t.deadline),
+        files: (t.files || []).map((f: any) => ({
+            ...f,
+            uploadedAt: toDateRequired(f.uploadedAt),
+        })),
+        assignedTo: t.assignedTo || [],
+    }));
+    
+    return {
+        id: doc.id,
+        ...data,
+        expectedOutcome: data.expectedOutcome || "",
+        deadline: toDate(data.deadline),
+        comments,
+        files,
+        tasks,
+        allocatedResources: data.allocatedResources || [],
+    } as Project;
+  }
+
+  const fetchData = useCallback(async (projectIdToUpdate?: string) => {
       if (!user?.companyId) {
         setLoading(false);
         return;
       }
-      setLoading(true);
+      
       try {
-        const { companyId } = user;
-        const projectsRef = collection(db, 'projects');
-        const usersRef = collection(db, 'users');
-        const resourcesRef = collection(db, 'resources');
+        if (projectIdToUpdate) {
+            // Only fetch and update a single project
+            const projectRef = doc(db, 'projects', projectIdToUpdate);
+            const projectSnap = await getDocs(query(collection(db, 'projects'), where('__name__', '==', projectIdToUpdate)));
+            if (!projectSnap.empty) {
+                const updatedProject = parseProjectDoc(projectSnap.docs[0]);
+                setProjects(prevProjects => prevProjects.map(p => p.id === projectIdToUpdate ? updatedProject : p));
+            }
+             // Also refresh resources in case they were changed
+            const resourcesQuery = query(collection(db, 'resources'), where('companyId', '==', user.companyId));
+            const resourcesSnap = await getDocs(resourcesQuery);
+            const resourcesData = resourcesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Resource[];
+            setResources(resourcesData);
 
-        const projectsQuery = query(projectsRef, where('companyId', '==', companyId));
-        const usersQuery = query(usersRef, where('companyId', '==', companyId));
-        const resourcesQuery = query(resourcesRef, where('companyId', '==', companyId));
+        } else {
+            // Fetch all data
+            setLoading(true);
+            const { companyId } = user;
+            const projectsRef = collection(db, 'projects');
+            const usersRef = collection(db, 'users');
+            const resourcesRef = collection(db, 'resources');
 
-        const [projectsSnap, usersSnap, resourcesSnap] = await Promise.all([ 
-          getDocs(projectsQuery), 
-          getDocs(usersQuery),
-          getDocs(resourcesQuery),
-        ]);
+            const projectsQuery = query(projectsRef, where('companyId', '==', companyId));
+            const usersQuery = query(usersRef, where('companyId', '==', companyId));
+            const resourcesQuery = query(resourcesRef, where('companyId', '==', companyId));
 
-        const projectsData = projectsSnap.docs.map(doc => {
-            const data = doc.data();
+            const [projectsSnap, usersSnap, resourcesSnap] = await Promise.all([ 
+              getDocs(projectsQuery), 
+              getDocs(usersQuery),
+              getDocs(resourcesQuery),
+            ]);
 
-            // Helper to safely convert Firestore Timestamps to JS Dates
-            const toDate = (timestamp: any): Date | null => {
-                if (!timestamp) return null;
-                // Handle both Timestamp objects and already-converted Date strings
-                if (timestamp.toDate) return timestamp.toDate();
-                if (typeof timestamp === 'string' || timestamp instanceof Date) return new Date(timestamp);
-                return null;
-            };
-
-            // Helper for required dates, providing a fallback to prevent crashes
-            const toDateRequired = (timestamp: any): Date => {
-                const date = toDate(timestamp);
-                return date || new Date(); // Fallback to now if conversion fails
-            };
+            const projectsData = projectsSnap.docs.map(parseProjectDoc);
             
-            const comments: Comment[] = (data.comments || []).map((c: any) => ({
-                ...c,
-                createdAt: toDateRequired(c.createdAt),
-            }));
-            
-            const files: ProjectFile[] = (data.files || []).map((f: any) => ({
-                ...f,
-                uploadedAt: toDateRequired(f.uploadedAt),
-            }));
-            
-            const tasks: Task[] = (data.tasks || []).map((t: any) => ({
-                ...t,
-                expectedOutcome: t.expectedOutcome || "",
-                deadline: toDate(t.deadline),
-                files: (t.files || []).map((f: any) => ({
-                    ...f,
-                    uploadedAt: toDateRequired(f.uploadedAt),
-                })),
-                assignedTo: t.assignedTo || [],
-            }));
-            
-            return {
-                id: doc.id,
-                ...data,
-                expectedOutcome: data.expectedOutcome || "",
-                deadline: toDate(data.deadline),
-                comments,
-                files,
-                tasks,
-                allocatedResources: data.allocatedResources || [],
-            } as Project;
-        });
-        
-        const usersData = usersSnap.docs.reduce((acc, doc) => {
-          acc[doc.id] = { uid: doc.id, ...(doc.data() as Omit<UserData, 'uid'>) };
-          return acc;
-        }, {} as { [uid: string]: UserData });
+            const usersData = usersSnap.docs.reduce((acc, doc) => {
+              acc[doc.id] = { uid: doc.id, ...(doc.data() as Omit<UserData, 'uid'>) };
+              return acc;
+            }, {} as { [uid: string]: UserData });
 
-        const resourcesData = resourcesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Resource[];
+            const resourcesData = resourcesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Resource[];
 
-        setProjects(projectsData);
-        setUsers(usersData);
-        setResources(resourcesData);
+            setProjects(projectsData);
+            setUsers(usersData);
+            setResources(resourcesData);
+        }
       } catch (error) {
         console.error("Error fetching project data:", error);
       } finally {
         setLoading(false);
       }
-    };
+    }, [user]);
   
   useEffect(() => {
     fetchData();
-  }, [user]);
+  }, [user, fetchData]);
 
   return (
     <div>
