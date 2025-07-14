@@ -161,7 +161,7 @@ export default function Dashboard() {
       const allResources = snap.docs.map(doc => doc.data()) as ResourceData[];
 
       const lowStockResources = allResources.filter(
-        r => r.category === 'Inputs' && typeof r.quantity === 'number' && typeof r.minStock === 'number' && r.quantity < r.minStock
+        r => typeof r.quantity === 'number' && typeof r.minStock === 'number' && r.minStock > 0 && r.quantity < r.minStock
       );
       const needsMaintenanceResources = allResources.filter(
         r => r.status === 'Needs Maintenance'

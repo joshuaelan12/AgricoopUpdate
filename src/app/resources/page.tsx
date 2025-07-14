@@ -206,15 +206,13 @@ function AddResourceDialog({ companyId, actorName, onResourceAdded }: { companyI
                 )}/>
             </div>
 
-            {category === 'Inputs' && (
-                <FormField control={form.control} name="minStock" render={({ field }) => (
-                <FormItem>
-                    <FormLabel>Minimum Stock for Alert</FormLabel>
-                    <FormControl><Input type="number" placeholder="e.g., 10" {...field} /></FormControl>
-                    <FormMessage />
-                </FormItem>
-                )}/>
-            )}
+            <FormField control={form.control} name="minStock" render={({ field }) => (
+            <FormItem>
+                <FormLabel>Minimum Stock for Alert</FormLabel>
+                <FormControl><Input type="number" placeholder="e.g., 10" {...field} /></FormControl>
+                <FormMessage />
+            </FormItem>
+            )}/>
 
             <DialogFooter>
                <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
@@ -345,15 +343,14 @@ function EditResourceDialog({ resource, actorName, onResourceUpdated }: { resour
                 )}/>
             </div>
 
-            {category === 'Inputs' && (
-                <FormField control={form.control} name="minStock" render={({ field }) => (
-                <FormItem>
-                    <FormLabel>Minimum Stock for Alert</FormLabel>
-                    <FormControl><Input type="number" placeholder="e.g., 10" {...field} /></FormControl>
-                    <FormMessage />
-                </FormItem>
-                )}/>
-            )}
+            <FormField control={form.control} name="minStock" render={({ field }) => (
+            <FormItem>
+                <FormLabel>Minimum Stock for Alert</FormLabel>
+                <FormControl><Input type="number" placeholder="e.g., 10" {...field} /></FormControl>
+                <FormMessage />
+            </FormItem>
+            )}/>
+            
             <DialogFooter>
                <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
               <Button type="submit" disabled={form.formState.isSubmitting}>
