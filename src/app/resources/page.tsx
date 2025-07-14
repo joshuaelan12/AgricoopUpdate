@@ -1,11 +1,11 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 import {
   Card,
@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Package, Tractor, Droplets, DollarSign, Warehouse, PlusCircle, Loader2, Pencil, Car } from "lucide-react";
+import { Package, Tractor, Droplets, DollarSign, Warehouse, PlusCircle, Loader2, Pencil, Car, XCircle } from "lucide-react";
 import { useAuth } from '@/hooks/use-auth';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -367,10 +367,13 @@ function EditResourceDialog({ resource, actorName, onResourceUpdated }: { resour
 
 
 // --- MAIN COMPONENT ---
-export default function ResourcesPage() {
+function ResourcesPageContent() {
   const { user } = useAuth();
-  const [resources, setResources] = useState<Resource[]>([]);
+  const [allResources, setAllResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const filter = searchParams.get('filter');
 
   const fetchResources = useCallback(async () => {
     if (!user?.companyId) {
@@ -389,10 +392,10 @@ export default function ResourcesPage() {
         ...doc.data(),
       })) as Resource[];
       
-      setResources(resourcesData);
+      setAllResources(resourcesData);
     } catch (error) {
       console.error("Error fetching resources:", error);
-      setResources([]);
+      setAllResources([]);
     } finally {
       setLoading(false);
     }
@@ -401,6 +404,20 @@ export default function ResourcesPage() {
   useEffect(() => {
     fetchResources();
   }, [fetchResources]);
+
+  const displayedResources = useMemo(() => {
+    if (filter === 'alerts') {
+        return allResources.filter(r => 
+            (r.status === 'Needs Maintenance') ||
+            (typeof r.quantity === 'number' && typeof r.minStock === 'number' && r.minStock > 0 && r.quantity < r.minStock)
+        );
+    }
+    return allResources;
+  }, [allResources, filter]);
+  
+  const handleClearFilter = () => {
+    router.push('/resources');
+  };
 
   if (loading) {
     return <ResourcesSkeleton />;
@@ -419,13 +436,28 @@ export default function ResourcesPage() {
             <AddResourceDialog companyId={user.companyId} actorName={user.displayName} onResourceAdded={fetchResources} />
         )}
       </div>
+      
+      {filter && (
+        <Card className="mb-6 bg-accent">
+            <CardHeader className="flex-row items-center justify-between">
+                <div>
+                    <CardTitle>Filtered View</CardTitle>
+                    <CardDescription className="text-accent-foreground">Showing only resources that require attention.</CardDescription>
+                </div>
+                <Button variant="ghost" onClick={handleClearFilter}>
+                    <XCircle className="mr-2 h-4 w-4" /> Clear Filter
+                </Button>
+            </CardHeader>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="font-headline">Inventory</CardTitle>
           <CardDescription>A complete list of all tracked resources.</CardDescription>
         </CardHeader>
         <CardContent>
-          {resources.length > 0 ? (
+          {displayedResources.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -437,7 +469,7 @@ export default function ResourcesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {resources.map((resource) => (
+                {displayedResources.map((resource) => (
                   <TableRow key={resource.id}>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -464,9 +496,9 @@ export default function ResourcesPage() {
           ) : (
              <div className="flex flex-col items-center justify-center p-12 text-center">
               <Warehouse className="h-16 w-16 text-muted-foreground mb-4" />
-              <h2 className="text-2xl font-headline">No Resources Found</h2>
+              <h2 className="text-2xl font-headline">{filter ? "No Alerts" : "No Resources Found"}</h2>
               <p className="text-muted-foreground">
-                Your inventory is empty. Click "Add Resource" to get started.
+                {filter ? "All resources are in good condition." : 'Your inventory is empty. Click "Add Resource" to get started.'}
               </p>
             </div>
           )}
@@ -474,6 +506,14 @@ export default function ResourcesPage() {
       </Card>
     </div>
   )
+}
+
+export default function ResourcesPage() {
+    return (
+        <Suspense fallback={<ResourcesSkeleton />}>
+            <ResourcesPageContent />
+        </Suspense>
+    )
 }
 
 

@@ -223,17 +223,19 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
-        <Card className={cn({ "bg-destructive text-destructive-foreground": stats?.resourceAlerts > 0 })}>
-          <CardHeader className="pb-2">
-            <CardDescription className={cn("font-headline", { "text-destructive-foreground/80": stats?.resourceAlerts > 0 })}>Resources</CardDescription>
-            <CardTitle className="text-4xl font-headline">Alerts: {stats?.resourceAlerts ?? 0}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className={cn("text-xs text-muted-foreground truncate", { "text-destructive-foreground/70": stats?.resourceAlerts > 0 })}>
-              {resourceAlertText()}
-            </div>
-          </CardContent>
-        </Card>
+        <Link href="/resources?filter=alerts" className="block">
+          <Card className={cn("h-full hover:border-primary transition-colors", { "bg-destructive text-destructive-foreground hover:border-destructive-foreground": stats?.resourceAlerts > 0 })}>
+            <CardHeader className="pb-2">
+              <CardDescription className={cn("font-headline", { "text-destructive-foreground/80": stats?.resourceAlerts > 0 })}>Resources</CardDescription>
+              <CardTitle className="text-4xl font-headline">Alerts: {stats?.resourceAlerts ?? 0}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className={cn("text-xs text-muted-foreground truncate", { "text-destructive-foreground/70": stats?.resourceAlerts > 0 })}>
+                {resourceAlertText()}
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
